@@ -258,9 +258,6 @@
         </div>
         <div class="controls">
           <button id="resetPlanButton" class="ghost">Reset plan</button>
-          <a href="/pairs.html">
-            <button type="button" class="ghost">Open simple pair randomizer</button>
-          </a>
         </div>
       </div>
 
@@ -671,7 +668,7 @@
               titleSpan.style.cursor = 'pointer'
               titleSpan.title = 'Click to rename track'
               titleSpan.addEventListener('click', () => {
-                const newName = prompt('Track name?', track.name)
+                const newName = prompt('New track name?', track.name)
                 if (!newName) return
                 updateTrackName(track.id, newName)
               })
@@ -881,4 +878,4 @@
       })()
     </script>
   </body>
-  </html>
+</html>
