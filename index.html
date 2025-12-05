@@ -114,7 +114,7 @@
 
       .tracks-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
         gap: 12px;
         align-items: flex-start;
       }
@@ -141,11 +141,15 @@
         align-items: center;
         justify-content: space-between;
         gap: 6px;
+        min-width: 0;
       }
 
       .track-title {
         font-weight: 600;
         font-size: 0.95rem;
+        word-break: break-word;
+        overflow-wrap: anywhere;
+        min-width: 0;
       }
 
       .track-type {
@@ -201,9 +205,10 @@
 
       .person {
         display: flex;
-        align-items: center;
+        align-items: flex-start;
         justify-content: space-between;
         gap: 6px;
+        flex-wrap: wrap;
         padding: 4px 6px;
         border-radius: 4px;
         background: #ffffff;
@@ -212,13 +217,18 @@
       }
 
       .person-name {
-        flex: 1;
+        flex: 1 1 auto;
         word-break: break-word;
+        overflow-wrap: anywhere;
+        min-width: 0;
       }
 
       .person-actions {
         display: flex;
         gap: 2px;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        flex: 0 0 auto;
       }
 
       .badge {
