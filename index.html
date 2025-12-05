@@ -249,6 +249,28 @@
         margin-left: 8px;
       }
 
+      .person-pending-retire {
+        background: #fef2f2;
+      }
+
+      .person-pending-retire .person-name::after {
+        content: ' (retiring…)';
+        font-size: 0.75rem;
+        color: var(--danger);
+      }
+
+      .person-actions select {
+        padding: 2px 4px;
+        font-size: 0.7rem;
+        max-width: 80px;
+      }
+
+      @media (min-width: 768px) {
+        .person-actions button[data-label]::after {
+          content: ' ' attr(data-label);
+        }
+      }
+
       .badge {
         display: inline-flex;
         align-items: center;
@@ -309,6 +331,7 @@
           Tracks: On Deck distributes into all normal tracks. Out of Office is excluded from random allocation.
         </div>
         <button id="addTrackButton">Add track</button>
+        <div id="capacityNotice" class="muted" style="font-size:0.75rem;"></div>
       </section>
 
       <section id="tracksContainer" class="tracks-grid" aria-label="Tracks"></section>
@@ -395,6 +418,16 @@
 
         function getPersonById(id) {
           return state.people.find((p) => p.id === id) || null
+        }
+
+        function updatePersonName(personId, newName) {
+          const person = getPersonById(personId)
+          if (!person) return
+          const trimmed = newName.trim()
+          if (!trimmed) return
+          person.name = trimmed
+          saveState()
+          render()
         }
 
         function trackHasCapacity(track) {
@@ -492,6 +525,15 @@
           if (!onDeck) return
 
           if (track.personIds.length <= 1) return
+
+          const toSweepCount = track.personIds.length - 1
+          if (
+            !confirm(
+              `Sweep ${toSweepCount} people from "${track.name}" back to On Deck, keeping one here?`,
+            )
+          ) {
+            return
+          }
 
           const idxToKeep = Math.floor(Math.random() * track.personIds.length)
           const keepId = track.personIds[idxToKeep]
@@ -684,6 +726,16 @@
           if (!container) return
           container.innerHTML = ''
 
+          const capacityNotice = document.getElementById('capacityNotice')
+          if (capacityNotice) {
+            const normalTracks = state.tracks.filter((t) => t.type === 'normal')
+            const anyHasCapacity = normalTracks.some((t) => trackHasCapacity(t))
+            capacityNotice.textContent =
+              normalTracks.length && !anyHasCapacity
+                ? 'All tracks are at capacity; shuffle and drag are disabled until space is freed.'
+                : ''
+          }
+
           for (const track of state.tracks) {
             const trackEl = document.createElement('section')
             trackEl.className = 'track'
@@ -807,6 +859,7 @@
               const sweepBtn = document.createElement('button')
               sweepBtn.textContent = '⬅️ Sweep (keep one)'
               sweepBtn.title = 'Sweep everyone but one back to On Deck'
+              sweepBtn.className = 'primary'
               sweepBtn.addEventListener('click', () => {
                 sweepTrackKeepOne(track.id)
               })
@@ -859,6 +912,13 @@
                 const nameSpan = document.createElement('span')
                 nameSpan.className = 'person-name'
                 nameSpan.textContent = person.name
+                nameSpan.style.cursor = 'pointer'
+                nameSpan.title = 'Click to rename person'
+                nameSpan.addEventListener('click', () => {
+                  const newName = prompt('New name?', person.name)
+                  if (!newName) return
+                  updatePersonName(person.id, newName)
+                })
                 personEl.appendChild(nameSpan)
 
                 const actions = document.createElement('div')
@@ -866,11 +926,16 @@
 
                 const isPendingRetire = pendingRetirePersonId === person.id
 
+                if (isPendingRetire) {
+                  personEl.classList.add('person-pending-retire')
+                }
+
                 if (!isPendingRetire) {
                   const shuffleBtn = document.createElement('button')
                   shuffleBtn.textContent = '🔀'
                   shuffleBtn.title = 'Shuffle to another track'
                   shuffleBtn.className = 'primary'
+                  shuffleBtn.dataset.label = 'Shuffle'
                   const canShuffle = state.tracks.some((t) => {
                     if (t.id === track.id) return false
                     if (t.type === 'out_of_office') return false
@@ -895,13 +960,46 @@
                     })
                     actions.appendChild(sweepBtn)
                   }
+
+                  const moveCandidates = state.tracks.filter((t) => {
+                    if (t.id === track.id) return false
+                    if (t.type === 'out_of_office') return false
+                    return trackHasCapacity(t)
+                  })
+
+                  if (moveCandidates.length) {
+                    const moveSelect = document.createElement('select')
+                    moveSelect.setAttribute('aria-label', 'Move to track')
+
+                    const placeholderOption = document.createElement('option')
+                    placeholderOption.value = ''
+                    placeholderOption.textContent = 'Move…'
+                    placeholderOption.disabled = true
+                    placeholderOption.selected = true
+                    moveSelect.appendChild(placeholderOption)
+
+                    for (const t of moveCandidates) {
+                      const opt = document.createElement('option')
+                      opt.value = t.id
+                      opt.textContent = t.name
+                      moveSelect.appendChild(opt)
+                    }
+
+                    moveSelect.addEventListener('change', (ev) => {
+                      const targetId = ev.target.value
+                      if (!targetId) return
+                      movePersonToTrack(person.id, targetId)
+                    })
+
+                    actions.appendChild(moveSelect)
+                  }
                 }
 
                 const retireBtn = document.createElement('button')
                 if (isPendingRetire) {
                   retireBtn.textContent = '✅'
                   retireBtn.className = 'danger'
-                  retireBtn.title = 'Confirm retire'
+                  retireBtn.title = `Confirm retire ${person.name}`
                 } else {
                   retireBtn.textContent = '👋'
                   retireBtn.className = 'retire-button'
