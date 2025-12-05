@@ -188,6 +188,8 @@
         border-radius: 4px;
         background: #f9fafb;
         min-height: 60px;
+        max-height: 260px;
+        overflow-y: auto;
       }
 
       .people-list.empty {
@@ -227,8 +229,24 @@
         display: flex;
         gap: 2px;
         flex-wrap: wrap;
-        justify-content: flex-end;
+        justify-content: flex-start;
         flex: 0 0 auto;
+      }
+
+      .person-actions button {
+        padding: 2px 6px;
+        font-size: 0.7rem;
+      }
+
+      .person-actions .retire-button {
+        border-color: var(--danger);
+        color: var(--danger);
+        background: #fef2f2;
+        margin-left: 8px;
+      }
+
+      .person-actions .danger {
+        margin-left: 8px;
       }
 
       .badge {
@@ -250,6 +268,10 @@
 
       .muted {
         color: var(--muted);
+      }
+
+      .track-full {
+        border-color: #f97316;
       }
 
       @media (max-width: 600px) {
@@ -305,6 +327,7 @@
         /** @type {PlannerState} */
         let state
         let currentDragPersonId = null
+        let pendingRetirePersonId = null
 
         function createInitialState() {
           return {
@@ -439,7 +462,6 @@
           if (!person || !target) return
 
           if (!trackHasCapacity(target)) {
-            alert('Track is at capacity.')
             return
           }
 
@@ -540,6 +562,8 @@
           if (!track || track.type !== 'normal') return
 
           const originalCapacity = track.capacity
+          const onDeck = getTrackByType('on_deck')
+          if (!onDeck) return
 
           if (newCapacity == null) {
             track.capacity = null
@@ -548,12 +572,18 @@
             return
           } else {
             if (track.personIds.length > newCapacity) {
-              alert(
-                'Capacity is lower than the number of assigned people. Remove some people first or sweep the track.',
-              )
-              // Do not update capacity; revert via re-render.
-              render()
-              return
+              const overflowCount = track.personIds.length - newCapacity
+              if (
+                !confirm(
+                  `${overflowCount} people will be moved back to On Deck. Continue?`,
+                )
+              ) {
+                // Re-render to reset any partial input state.
+                render()
+                return
+              }
+              const overflow = track.personIds.splice(newCapacity)
+              onDeck.personIds.push(...overflow)
             }
             track.capacity = newCapacity
           }
@@ -593,7 +623,6 @@
           })
 
           if (!candidates.length) {
-            alert('No other track has capacity to accept this person.')
             return
           }
 
@@ -605,19 +634,12 @@
         function retirePerson(personId) {
           const person = getPersonById(personId)
           if (!person) return
-          if (
-            !confirm(
-              `Retire "${person.name}"? They will be removed from all tracks and this planner.`,
-            )
-          ) {
-            return
-          }
-
           state.people = state.people.filter((p) => p.id !== personId)
           for (const track of state.tracks) {
             track.personIds = track.personIds.filter((id) => id !== personId)
           }
 
+          pendingRetirePersonId = null
           saveState()
           render()
         }
@@ -635,6 +657,8 @@
 
         function onDragOverList(ev, trackId) {
           if (!currentDragPersonId) return
+          const track = getTrackById(trackId)
+          if (!track || !trackHasCapacity(track)) return
           ev.preventDefault()
           ev.dataTransfer.dropEffect = 'move'
           const el = ev.currentTarget
@@ -713,6 +737,11 @@
                 : `${assigned} / ${capacityLabel} assigned`
             metaRow.appendChild(countSpan)
 
+            const isFull =
+              track.type === 'normal' &&
+              track.capacity != null &&
+              assigned >= track.capacity
+
             if (track.type === 'normal') {
               const capWrapper = document.createElement('div')
               const capLabel = document.createElement('span')
@@ -744,6 +773,14 @@
               capWrapper.appendChild(capLabel)
               capWrapper.appendChild(capInput)
               metaRow.appendChild(capWrapper)
+
+              if (isFull) {
+                const fullLabel = document.createElement('span')
+                fullLabel.className = 'track-type'
+                fullLabel.textContent = 'Full'
+                metaRow.appendChild(fullLabel)
+                trackEl.classList.add('track-full')
+              }
             } else {
               const typeLabel = document.createElement('span')
               typeLabel.className = 'track-type'
@@ -768,7 +805,8 @@
               actionsRow.appendChild(sweepAllocBtn)
             } else if (track.type === 'normal') {
               const sweepBtn = document.createElement('button')
-              sweepBtn.textContent = 'Sweep (keep one)'
+              sweepBtn.textContent = '⬅️ Sweep (keep one)'
+              sweepBtn.title = 'Sweep everyone but one back to On Deck'
               sweepBtn.addEventListener('click', () => {
                 sweepTrackKeepOne(track.id)
               })
@@ -826,28 +864,69 @@
                 const actions = document.createElement('div')
                 actions.className = 'person-actions'
 
-                if (track.type !== 'on_deck') {
-                  const sweepBtn = document.createElement('button')
-                  sweepBtn.textContent = 'Sweep'
-                  sweepBtn.addEventListener('click', () => {
-                    sweepPerson(person.id)
+                const isPendingRetire = pendingRetirePersonId === person.id
+
+                if (!isPendingRetire) {
+                  const shuffleBtn = document.createElement('button')
+                  shuffleBtn.textContent = '🔀'
+                  shuffleBtn.title = 'Shuffle to another track'
+                  shuffleBtn.className = 'primary'
+                  const canShuffle = state.tracks.some((t) => {
+                    if (t.id === track.id) return false
+                    if (t.type === 'out_of_office') return false
+                    if (t.type === 'on_deck') return false
+                    return trackHasCapacity(t)
                   })
-                  actions.appendChild(sweepBtn)
+                  shuffleBtn.disabled = !canShuffle
+                  if (!canShuffle) {
+                    shuffleBtn.title = 'No track has capacity'
+                  }
+                  shuffleBtn.addEventListener('click', () => {
+                    shufflePerson(person.id)
+                  })
+                  actions.appendChild(shuffleBtn)
+
+                  if (track.type !== 'on_deck') {
+                    const sweepBtn = document.createElement('button')
+                    sweepBtn.textContent = '⬅️'
+                    sweepBtn.title = 'Sweep to On Deck'
+                    sweepBtn.addEventListener('click', () => {
+                      sweepPerson(person.id)
+                    })
+                    actions.appendChild(sweepBtn)
+                  }
                 }
 
-                const shuffleBtn = document.createElement('button')
-                shuffleBtn.textContent = 'Shuffle'
-                shuffleBtn.addEventListener('click', () => {
-                  shufflePerson(person.id)
-                })
-                actions.appendChild(shuffleBtn)
-
                 const retireBtn = document.createElement('button')
-                retireBtn.textContent = 'Retire'
+                if (isPendingRetire) {
+                  retireBtn.textContent = '✅'
+                  retireBtn.className = 'danger'
+                  retireBtn.title = 'Confirm retire'
+                } else {
+                  retireBtn.textContent = '👋'
+                  retireBtn.className = 'retire-button'
+                  retireBtn.title = 'Retire from planner'
+                }
                 retireBtn.addEventListener('click', () => {
-                  retirePerson(person.id)
+                  if (pendingRetirePersonId === person.id) {
+                    retirePerson(person.id)
+                  } else {
+                    pendingRetirePersonId = person.id
+                    render()
+                  }
                 })
                 actions.appendChild(retireBtn)
+
+                if (isPendingRetire) {
+                  const cancelRetireBtn = document.createElement('button')
+                  cancelRetireBtn.textContent = '✖️'
+                  cancelRetireBtn.title = 'Cancel'
+                  cancelRetireBtn.addEventListener('click', () => {
+                    pendingRetirePersonId = null
+                    render()
+                  })
+                  actions.appendChild(cancelRetireBtn)
+                }
 
                 personEl.appendChild(actions)
                 peopleList.appendChild(personEl)
