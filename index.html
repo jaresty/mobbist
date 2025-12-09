@@ -848,7 +848,7 @@
 
             if (track.type === 'on_deck') {
               const sweepAllocBtn = document.createElement('button')
-              sweepAllocBtn.textContent = 'Sweep & allocate'
+              sweepAllocBtn.textContent = 'Allocate to tracks'
               sweepAllocBtn.className = 'primary'
               sweepAllocBtn.disabled = !track.personIds.length
               sweepAllocBtn.addEventListener('click', () => {
