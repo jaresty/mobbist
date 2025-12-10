@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Pair / Mob Planner</title>
+    <title>Mobbist</title>
     <style>
       :root {
         --bg: #f4f4f4;
@@ -307,8 +307,8 @@
     <main>
       <div class="layout-header">
         <div>
-          <h1>Pair / Mob Planner</h1>
-          <p>Manage tracks and quickly reshuffle people using local storage.</p>
+          <h1>Mobbist</h1>
+          <p>Plan pairs and mobs and reshuffle people quickly in your browser.</p>
         </div>
         <div class="controls">
           <button id="resetPlanButton" class="ghost">Reset plan</button>
@@ -330,7 +330,12 @@
         <div class="muted" style="font-size:0.8rem;">
           Tracks: On Deck distributes into all normal tracks. Out of Office is excluded from random allocation.
         </div>
-        <button id="addTrackButton">Add track</button>
+        <div class="muted" style="font-size:0.75rem; display:flex; align-items:center; gap:4px; flex-wrap:wrap;">
+          <label for="defaultCapacityInput">Default capacity:</label>
+          <input id="defaultCapacityInput" type="number" min="1" value="2" style="width:3rem; padding:2px 4px; font-size:0.75rem;" />
+          <button id="addTrackButton">Add track</button>
+          <button id="deleteSelectedTracksButton" class="danger" disabled>Delete selected tracks</button>
+        </div>
         <div id="capacityNotice" class="muted" style="font-size:0.75rem;"></div>
       </section>
 
@@ -339,18 +344,21 @@
 
     <script>
       ;(function () {
-        const STORAGE_KEY = 'pairPlanner:v1'
+        const STORAGE_KEY = 'mobbist:v1'
+        const LEGACY_STORAGE_KEYS = ['pairPlanner:v1']
 
         /**
          * @typedef {{ id: string, name: string }} Person
          * @typedef {{ id: string, name: string, type: 'normal' | 'on_deck' | 'out_of_office', capacity: number | null, personIds: string[] }} Track
-         * @typedef {{ people: Person[], tracks: Track[], nextPersonId: number, nextTrackId: number }} PlannerState
+         * @typedef {{ people: Person[], tracks: Track[], nextPersonId: number, nextTrackId: number, defaultTrackCapacity: number }} PlannerState
          */
 
         /** @type {PlannerState} */
         let state
         let currentDragPersonId = null
         let pendingRetirePersonId = null
+        /** @type {Set<string>} */
+        let selectedTrackIds = new Set()
 
         function createInitialState() {
           return {
@@ -380,12 +388,19 @@
             ],
             nextPersonId: 1,
             nextTrackId: 2,
+            defaultTrackCapacity: 2,
           }
         }
 
         function loadState() {
           try {
-            const raw = window.localStorage.getItem(STORAGE_KEY)
+            let raw = window.localStorage.getItem(STORAGE_KEY)
+            if (!raw) {
+              for (const legacyKey of LEGACY_STORAGE_KEYS) {
+                raw = window.localStorage.getItem(legacyKey)
+                if (raw) break
+              }
+            }
             if (!raw) return createInitialState()
             const parsed = JSON.parse(raw)
             if (!parsed || !Array.isArray(parsed.people) || !Array.isArray(parsed.tracks)) {
@@ -393,6 +408,9 @@
             }
             if (typeof parsed.nextPersonId !== 'number') parsed.nextPersonId = 1
             if (typeof parsed.nextTrackId !== 'number') parsed.nextTrackId = 1
+            if (typeof parsed.defaultTrackCapacity !== 'number' || parsed.defaultTrackCapacity < 1) {
+              parsed.defaultTrackCapacity = 2
+            }
             return parsed
           } catch (e) {
             console.warn('Failed to load planner state, resetting.', e)
@@ -435,6 +453,12 @@
           return track.personIds.length < track.capacity
         }
 
+        function getDefaultTrackCapacity() {
+          if (!state || typeof state.defaultTrackCapacity !== 'number') return 2
+          if (state.defaultTrackCapacity < 1) return 1
+          return state.defaultTrackCapacity
+        }
+
         function addPeopleFromTextarea() {
           const textarea = document.getElementById('bulkNamesInput')
           if (!textarea) return
@@ -471,6 +495,7 @@
           }
           window.localStorage.removeItem(STORAGE_KEY)
           state = createInitialState()
+          selectedTrackIds.clear()
           render()
         }
 
@@ -481,10 +506,30 @@
             id: 'track-' + state.nextTrackId++,
             name: name.trim(),
             type: 'normal',
-            capacity: 2,
+            capacity: getDefaultTrackCapacity(),
             personIds: [],
           }
           state.tracks.push(track)
+          saveState()
+          render()
+        }
+
+        function quickAddCapacityTrack(extraSlots) {
+          const defaultCapacity = getDefaultTrackCapacity()
+          let remaining = Math.max(defaultCapacity, extraSlots || defaultCapacity)
+
+          while (remaining > 0) {
+            const track = {
+              id: 'track-' + state.nextTrackId++,
+              name: `Extra Track ${state.nextTrackId - 1}`,
+              type: 'normal',
+              capacity: defaultCapacity,
+              personIds: [],
+            }
+            state.tracks.push(track)
+            remaining -= defaultCapacity
+          }
+
           saveState()
           render()
         }
@@ -526,15 +571,6 @@
 
           if (track.personIds.length <= 1) return
 
-          const toSweepCount = track.personIds.length - 1
-          if (
-            !confirm(
-              `Sweep ${toSweepCount} people from "${track.name}" back to On Deck, keeping one here?`,
-            )
-          ) {
-            return
-          }
-
           const idxToKeep = Math.floor(Math.random() * track.personIds.length)
           const keepId = track.personIds[idxToKeep]
           const toMove = track.personIds.filter((id) => id !== keepId)
@@ -550,8 +586,28 @@
           const onDeck = getTrackByType('on_deck')
           if (!onDeck || !onDeck.personIds.length) return
 
-          const normalTracks = state.tracks.filter((t) => t.type === 'normal')
+          let normalTracks = state.tracks.filter((t) => t.type === 'normal')
           if (!normalTracks.length) return
+
+          // If there isn't enough capacity, automatically create an extra track.
+          const onDeckCount = onDeck.personIds.length
+          let totalAvailableSlots = 0
+          let hasInfiniteCapacity = false
+          for (const track of normalTracks) {
+            if (track.capacity == null) {
+              hasInfiniteCapacity = true
+              break
+            }
+            const available = Math.max(0, track.capacity - track.personIds.length)
+            totalAvailableSlots += available
+          }
+
+          if (!hasInfiniteCapacity && onDeckCount > 0 && totalAvailableSlots < onDeckCount) {
+            const shortage = onDeckCount - totalAvailableSlots
+            quickAddCapacityTrack(shortage)
+            // Recompute tracks to include the new one.
+            normalTracks = state.tracks.filter((t) => t.type === 'normal')
+          }
 
           // Create a shuffled copy of on deck people
           const remaining = onDeck.personIds.slice()
@@ -594,6 +650,37 @@
 
           onDeck.personIds.push(...track.personIds)
           state.tracks = state.tracks.filter((t) => t.id !== trackId)
+
+          saveState()
+          render()
+        }
+
+        function deleteSelectedTracks() {
+          const onDeck = getTrackByType('on_deck')
+          if (!onDeck) return
+
+          const tracksToDelete = state.tracks.filter(
+            (t) => t.type === 'normal' && selectedTrackIds.has(t.id),
+          )
+          if (!tracksToDelete.length) return
+
+          const names = tracksToDelete.map((t) => `"${t.name}"`).join(', ')
+          if (
+            !confirm(
+              `Delete ${tracksToDelete.length} track${tracksToDelete.length === 1 ? '' : 's'} (${names})? All people on these tracks will be moved back to On Deck.`,
+            )
+          ) {
+            return
+          }
+
+          for (const track of tracksToDelete) {
+            onDeck.personIds.push(...track.personIds)
+          }
+
+          state.tracks = state.tracks.filter(
+            (t) => !(t.type === 'normal' && selectedTrackIds.has(t.id)),
+          )
+          selectedTrackIds.clear()
 
           saveState()
           render()
@@ -657,12 +744,24 @@
           const currentTrack = state.tracks.find((t) => t.personIds.includes(personId))
           if (!currentTrack) return
 
-          const candidates = state.tracks.filter((t) => {
+          let candidates = state.tracks.filter((t) => {
             if (t.id === currentTrack.id) return false
             if (t.type === 'out_of_office') return false
             if (t.type === 'on_deck') return false
             return trackHasCapacity(t)
           })
+
+          if (!candidates.length) {
+            // No existing track has capacity; create just enough slots
+            // for the person being shuffled, then try again.
+            quickAddCapacityTrack(1)
+            candidates = state.tracks.filter((t) => {
+              if (t.id === currentTrack.id) return false
+              if (t.type === 'out_of_office') return false
+              if (t.type === 'on_deck') return false
+              return trackHasCapacity(t)
+            })
+          }
 
           if (!candidates.length) {
             return
@@ -694,7 +793,9 @@
         function onDragEndPerson() {
           currentDragPersonId = null
           const lists = document.querySelectorAll('.people-list')
-          lists.forEach((el) => el.classList.remove('drop-target'))
+          lists.forEach((el) => {
+            el.classList.remove('drop-target')
+          })
         }
 
         function onDragOverList(ev, trackId) {
@@ -726,14 +827,55 @@
           if (!container) return
           container.innerHTML = ''
 
+          const defaultCapacityInput = document.getElementById('defaultCapacityInput')
+          if (defaultCapacityInput) {
+            defaultCapacityInput.value = String(getDefaultTrackCapacity())
+          }
+
+          const deleteSelectedTracksButton = document.getElementById('deleteSelectedTracksButton')
+          if (deleteSelectedTracksButton) {
+            const hasSelected = Array.from(selectedTrackIds).some((id) => {
+              const t = getTrackById(id)
+              return t && t.type === 'normal'
+            })
+            deleteSelectedTracksButton.disabled = !hasSelected
+          }
+
           const capacityNotice = document.getElementById('capacityNotice')
           if (capacityNotice) {
+            capacityNotice.innerHTML = ''
             const normalTracks = state.tracks.filter((t) => t.type === 'normal')
             const anyHasCapacity = normalTracks.some((t) => trackHasCapacity(t))
-            capacityNotice.textContent =
-              normalTracks.length && !anyHasCapacity
-                ? 'All tracks are at capacity; shuffle and drag are disabled until space is freed.'
-                : ''
+            const onDeck = getTrackByType('on_deck')
+            const onDeckCount = onDeck ? onDeck.personIds.length : 0
+
+            let totalAvailableSlots = 0
+            let hasInfiniteCapacity = false
+            for (const track of normalTracks) {
+              if (track.capacity == null) {
+                hasInfiniteCapacity = true
+                break
+              }
+              const available = Math.max(0, track.capacity - track.personIds.length)
+              totalAvailableSlots += available
+            }
+
+            let shortage = 0
+            if (!hasInfiniteCapacity && onDeckCount > 0 && totalAvailableSlots < onDeckCount) {
+              shortage = onDeckCount - totalAvailableSlots
+            }
+
+            if (shortage > 0) {
+              const text = document.createElement('span')
+              const defaultCap = getDefaultTrackCapacity()
+              text.textContent = `Not enough track capacity: ${onDeckCount} on deck but only ${totalAvailableSlots} open slot${totalAvailableSlots === 1 ? '' : 's'}. Allocating will automatically create extra tracks (capacity ${defaultCap}) until everyone fits.`
+              capacityNotice.appendChild(text)
+            } else if (normalTracks.length && !anyHasCapacity) {
+              const text = document.createElement('span')
+              text.textContent =
+                'All tracks are at capacity; shuffle and drag are disabled until space is freed.'
+              capacityNotice.appendChild(text)
+            }
           }
 
           for (const track of state.tracks) {
@@ -746,6 +888,24 @@
 
             const headerRow = document.createElement('div')
             headerRow.className = 'track-header-row'
+
+            if (track.type === 'normal') {
+              const selectCheckbox = document.createElement('input')
+              selectCheckbox.type = 'checkbox'
+              selectCheckbox.className = 'track-select-checkbox'
+              selectCheckbox.checked = selectedTrackIds.has(track.id)
+              selectCheckbox.title = 'Select track for batch delete'
+              selectCheckbox.addEventListener('change', (ev) => {
+                if (ev.target.checked) {
+                  selectedTrackIds.add(track.id)
+                } else {
+                  selectedTrackIds.delete(track.id)
+                }
+                render()
+              })
+              headerRow.appendChild(selectCheckbox)
+            }
+
             const titleSpan = document.createElement('span')
             titleSpan.className = 'track-title'
             titleSpan.textContent = track.name
@@ -936,16 +1096,6 @@
                   shuffleBtn.title = 'Shuffle to another track'
                   shuffleBtn.className = 'primary'
                   shuffleBtn.dataset.label = 'Shuffle'
-                  const canShuffle = state.tracks.some((t) => {
-                    if (t.id === track.id) return false
-                    if (t.type === 'out_of_office') return false
-                    if (t.type === 'on_deck') return false
-                    return trackHasCapacity(t)
-                  })
-                  shuffleBtn.disabled = !canShuffle
-                  if (!canShuffle) {
-                    shuffleBtn.title = 'No track has capacity'
-                  }
                   shuffleBtn.addEventListener('click', () => {
                     shufflePerson(person.id)
                   })
@@ -1052,6 +1202,27 @@
           const addTrackButton = document.getElementById('addTrackButton')
           if (addTrackButton) {
             addTrackButton.addEventListener('click', addTrack)
+          }
+
+          const deleteSelectedTracksButton = document.getElementById('deleteSelectedTracksButton')
+          if (deleteSelectedTracksButton) {
+            deleteSelectedTracksButton.addEventListener('click', () => {
+              deleteSelectedTracks()
+            })
+          }
+
+          const defaultCapacityInput = document.getElementById('defaultCapacityInput')
+          if (defaultCapacityInput) {
+            defaultCapacityInput.addEventListener('change', (ev) => {
+              const raw = ev.target.value.trim()
+              let value = Number(raw)
+              if (!raw || Number.isNaN(value) || value < 1) {
+                value = 2
+              }
+              state.defaultTrackCapacity = value
+              saveState()
+              render()
+            })
           }
 
           render()
