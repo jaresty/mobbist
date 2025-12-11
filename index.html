@@ -332,11 +332,14 @@
         </div>
         <div class="muted" style="font-size:0.75rem; display:flex; align-items:center; gap:4px; flex-wrap:wrap;">
           <label for="defaultCapacityInput">Default capacity:</label>
-          <input id="defaultCapacityInput" type="number" min="1" value="2" style="width:3rem; padding:2px 4px; font-size:0.75rem;" />
-          <button id="addTrackButton">Add track</button>
-          <button id="deleteSelectedTracksButton" class="danger" disabled>Delete selected tracks</button>
-        </div>
-        <div id="capacityNotice" class="muted" style="font-size:0.75rem;"></div>
+           <input id="defaultCapacityInput" type="number" min="1" value="2" style="width:3rem; padding:2px 4px; font-size:0.75rem;" />
+           <button id="addTrackButton">Add track</button>
+           <button id="sweepAllTracksButton" disabled>Sweep all tracks</button>
+           <button id="deleteSelectedTracksButton" class="danger" disabled>Delete selected tracks</button>
+           <button id="deleteAllTracksButton" class="danger" disabled>Delete all tracks</button>
+         </div>
+         <div id="capacityNotice" class="muted" style="font-size:0.75rem;"></div>
+
       </section>
 
       <section id="tracksContainer" class="tracks-grid" aria-label="Tracks"></section>
@@ -357,6 +360,7 @@
         let state
         let currentDragPersonId = null
         let pendingRetirePersonId = null
+        let pendingDeleteTrackId = null
         /** @type {Set<string>} */
         let selectedTrackIds = new Set()
 
@@ -562,14 +566,11 @@
           render()
         }
 
-        function sweepTrackKeepOne(trackId) {
-          const track = getTrackById(trackId)
-          if (!track) return
-          if (track.type === 'on_deck') return
-          const onDeck = getTrackByType('on_deck')
-          if (!onDeck) return
-
-          if (track.personIds.length <= 1) return
+        function sweepTrackKeepOneInternal(track, onDeck) {
+          if (!track) return false
+          if (!onDeck) return false
+          if (track.type === 'on_deck') return false
+          if (track.personIds.length <= 1) return false
 
           const idxToKeep = Math.floor(Math.random() * track.personIds.length)
           const keepId = track.personIds[idxToKeep]
@@ -577,6 +578,34 @@
 
           track.personIds = [keepId]
           onDeck.personIds.push(...toMove)
+
+          return true
+        }
+
+        function sweepTrackKeepOne(trackId) {
+          const track = getTrackById(trackId)
+          const onDeck = getTrackByType('on_deck')
+          if (!track || !onDeck) return
+
+          if (!sweepTrackKeepOneInternal(track, onDeck)) return
+
+          saveState()
+          render()
+        }
+
+        function sweepAllTracksKeepOne() {
+          const onDeck = getTrackByType('on_deck')
+          if (!onDeck) return
+
+          let changed = false
+          for (const track of state.tracks) {
+            if (track.type !== 'normal') continue
+            if (sweepTrackKeepOneInternal(track, onDeck)) {
+              changed = true
+            }
+          }
+
+          if (!changed) return
 
           saveState()
           render()
@@ -587,9 +616,20 @@
           if (!onDeck || !onDeck.personIds.length) return
 
           let normalTracks = state.tracks.filter((t) => t.type === 'normal')
+
+          // If there are no normal tracks yet, create enough new ones
+          // (using the default capacity) so everyone on deck can be placed.
+          if (!normalTracks.length) {
+            const onDeckCount = onDeck.personIds.length
+            if (onDeckCount > 0) {
+              quickAddCapacityTrack(onDeckCount)
+              normalTracks = state.tracks.filter((t) => t.type === 'normal')
+            }
+          }
+
           if (!normalTracks.length) return
 
-          // If there isn't enough capacity, automatically create an extra track.
+          // If there isn't enough capacity, automatically create extra tracks.
           const onDeckCount = onDeck.personIds.length
           let totalAvailableSlots = 0
           let hasInfiniteCapacity = false
@@ -605,7 +645,7 @@
           if (!hasInfiniteCapacity && onDeckCount > 0 && totalAvailableSlots < onDeckCount) {
             const shortage = onDeckCount - totalAvailableSlots
             quickAddCapacityTrack(shortage)
-            // Recompute tracks to include the new one.
+            // Recompute tracks to include the new ones.
             normalTracks = state.tracks.filter((t) => t.type === 'normal')
           }
 
@@ -640,16 +680,39 @@
           const onDeck = getTrackByType('on_deck')
           if (!onDeck) return
 
+          onDeck.personIds.push(...track.personIds)
+          state.tracks = state.tracks.filter((t) => t.id !== trackId)
+          selectedTrackIds.delete(trackId)
+          if (pendingDeleteTrackId === trackId) {
+            pendingDeleteTrackId = null
+          }
+
+          saveState()
+          render()
+        }
+
+        function deleteAllTracks() {
+          const onDeck = getTrackByType('on_deck')
+          if (!onDeck) return
+
+          const normalTracks = state.tracks.filter((t) => t.type === 'normal')
+          if (!normalTracks.length) return
+
           if (
             !confirm(
-              `Delete track "${track.name}"? All people on this track will be moved back to On Deck.`,
+              `Delete all ${normalTracks.length} normal track${normalTracks.length === 1 ? '' : 's'}? All people on these tracks will be moved back to On Deck.`,
             )
           ) {
             return
           }
 
-          onDeck.personIds.push(...track.personIds)
-          state.tracks = state.tracks.filter((t) => t.id !== trackId)
+          for (const track of normalTracks) {
+            onDeck.personIds.push(...track.personIds)
+          }
+
+          state.tracks = state.tracks.filter((t) => t.type !== 'normal')
+          selectedTrackIds.clear()
+          pendingDeleteTrackId = null
 
           saveState()
           render()
@@ -841,6 +904,20 @@
             deleteSelectedTracksButton.disabled = !hasSelected
           }
 
+          const sweepAllTracksButton = document.getElementById('sweepAllTracksButton')
+          if (sweepAllTracksButton) {
+            const canSweepAny = state.tracks.some(
+              (t) => t.type === 'normal' && t.personIds.length > 1,
+            )
+            sweepAllTracksButton.disabled = !canSweepAny
+          }
+
+          const deleteAllTracksButton = document.getElementById('deleteAllTracksButton')
+          if (deleteAllTracksButton) {
+            const hasAnyNormalTrack = state.tracks.some((t) => t.type === 'normal')
+            deleteAllTracksButton.disabled = !hasAnyNormalTrack
+          }
+
           const capacityNotice = document.getElementById('capacityNotice')
           if (capacityNotice) {
             capacityNotice.innerHTML = ''
@@ -1006,6 +1083,8 @@
             const actionsRow = document.createElement('div')
             actionsRow.className = 'track-actions'
 
+            const isPendingDelete = pendingDeleteTrackId === track.id
+
             if (track.type === 'on_deck') {
               const sweepAllocBtn = document.createElement('button')
               sweepAllocBtn.textContent = 'Allocate to tracks'
@@ -1027,15 +1106,38 @@
               actionsRow.appendChild(sweepBtn)
             }
 
+
             if (track.type === 'normal') {
-              const deleteBtn = document.createElement('button')
-              deleteBtn.textContent = 'Delete track'
-              deleteBtn.className = 'danger'
-              deleteBtn.addEventListener('click', () => {
-                deleteTrack(track.id)
-              })
-              actionsRow.appendChild(deleteBtn)
+              if (isPendingDelete) {
+                const confirmBtn = document.createElement('button')
+                confirmBtn.textContent = 'Confirm delete'
+                confirmBtn.className = 'danger'
+                confirmBtn.addEventListener('click', () => {
+                  deleteTrack(track.id)
+                })
+                actionsRow.appendChild(confirmBtn)
+
+                const cancelBtn = document.createElement('button')
+                cancelBtn.textContent = 'Cancel'
+                cancelBtn.className = 'ghost'
+                cancelBtn.addEventListener('click', () => {
+                  pendingDeleteTrackId = null
+                  render()
+                })
+                actionsRow.appendChild(cancelBtn)
+              } else {
+                const deleteBtn = document.createElement('button')
+                deleteBtn.textContent = 'Delete track'
+                deleteBtn.className = 'danger'
+                deleteBtn.addEventListener('click', () => {
+                  pendingDeleteTrackId = track.id
+                  render()
+                })
+                actionsRow.appendChild(deleteBtn)
+              }
             }
+
+
 
             header.appendChild(actionsRow)
             trackEl.appendChild(header)
@@ -1208,6 +1310,20 @@
           if (deleteSelectedTracksButton) {
             deleteSelectedTracksButton.addEventListener('click', () => {
               deleteSelectedTracks()
+            })
+          }
+
+          const sweepAllTracksButton = document.getElementById('sweepAllTracksButton')
+          if (sweepAllTracksButton) {
+            sweepAllTracksButton.addEventListener('click', () => {
+              sweepAllTracksKeepOne()
+            })
+          }
+
+          const deleteAllTracksButton = document.getElementById('deleteAllTracksButton')
+          if (deleteAllTracksButton) {
+            deleteAllTracksButton.addEventListener('click', () => {
+              deleteAllTracks()
             })
           }
 
