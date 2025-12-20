@@ -119,6 +119,30 @@
         align-items: flex-start;
       }
 
+      .create-track-drop-zone {
+        display: none;
+        align-items: center;
+        justify-content: center;
+        padding: 16px;
+        border: 2px dashed var(--accent);
+        border-radius: 6px;
+        background: var(--accent-soft);
+        color: var(--accent);
+        font-weight: 600;
+        min-height: 96px;
+        transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+      }
+
+      .create-track-drop-zone.visible {
+        display: flex;
+      }
+
+      .create-track-drop-zone.hover {
+        background: var(--accent);
+        color: #ffffff;
+        border-color: var(--accent);
+      }
+
       .track {
         background: var(--card-bg);
         border-radius: 6px;
@@ -331,14 +355,14 @@
           Tracks: On Deck distributes into all normal tracks. Out of Office is excluded from random allocation.
         </div>
         <div class="muted" style="font-size:0.75rem; display:flex; align-items:center; gap:4px; flex-wrap:wrap;">
-          <label for="defaultCapacityInput">Default capacity:</label>
-           <input id="defaultCapacityInput" type="number" min="1" value="2" style="width:3rem; padding:2px 4px; font-size:0.75rem;" />
-           <button id="addTrackButton">Add track</button>
-           <button id="sweepAllTracksButton" disabled>Sweep all tracks</button>
-           <button id="deleteSelectedTracksButton" class="danger" disabled>Delete selected tracks</button>
-           <button id="deleteAllTracksButton" class="danger" disabled>Delete all tracks</button>
+           <label for="defaultCapacityInput">Default capacity:</label>
+            <input id="defaultCapacityInput" type="number" min="1" value="2" style="width:3rem; padding:2px 4px; font-size:0.75rem;" />
+            <button id="sweepAllTracksButton" disabled>Sweep all tracks</button>
+            <button id="deleteSelectedTracksButton" class="danger" disabled>Delete selected tracks</button>
+            <button id="deleteAllTracksButton" class="danger" disabled>Delete all tracks</button>
          </div>
          <div id="capacityNotice" class="muted" style="font-size:0.75rem;"></div>
+
 
       </section>
 
@@ -349,6 +373,7 @@
       ;(function () {
         const STORAGE_KEY = 'mobbist:v1'
         const LEGACY_STORAGE_KEYS = ['pairPlanner:v1']
+        const NEW_TRACK_OPTION_VALUE = '__create_new_track__'
 
         /**
          * @typedef {{ id: string, name: string }} Person
@@ -457,6 +482,52 @@
           return track.personIds.length < track.capacity
         }
 
+        function generateAutomaticTrackName(counter = state.nextTrackId) {
+          const letterIndex = counter
+          if (letterIndex >= 1 && letterIndex <= 26) {
+            return `Track ${String.fromCharCode(64 + letterIndex)}`
+          }
+          return `Track ${letterIndex}`
+        }
+
+        function setDropZoneActive(active) {
+          const dropZone = document.getElementById('createTrackDropZone')
+          if (!dropZone) return
+          if (active) {
+            dropZone.classList.add('visible')
+            dropZone.setAttribute('aria-hidden', 'false')
+          } else {
+            dropZone.classList.remove('visible')
+            dropZone.classList.remove('hover')
+            dropZone.setAttribute('aria-hidden', 'true')
+          }
+        }
+
+        function createTrackFromPersonDrop(personId) {
+          const person = getPersonById(personId)
+          if (!person) return
+
+          const sourceTrack = state.tracks.find((t) => t.personIds.includes(personId))
+          if (sourceTrack) {
+            sourceTrack.personIds = sourceTrack.personIds.filter((id) => id !== personId)
+          }
+
+          const trackCounter = state.nextTrackId++
+          const newTrackId = 'track-' + trackCounter
+          const trackName = generateAutomaticTrackName(trackCounter)
+          const newTrack = {
+            id: newTrackId,
+            name: trackName,
+            type: 'normal',
+            capacity: null,
+            personIds: [personId],
+          }
+
+          state.tracks.push(newTrack)
+          saveState()
+          render()
+        }
+
         function getDefaultTrackCapacity() {
           if (!state || typeof state.defaultTrackCapacity !== 'number') return 2
           if (state.defaultTrackCapacity < 1) return 1
@@ -500,21 +571,6 @@
           window.localStorage.removeItem(STORAGE_KEY)
           state = createInitialState()
           selectedTrackIds.clear()
-          render()
-        }
-
-        function addTrack() {
-          const name = prompt('Track name?', 'New Track')
-          if (!name) return
-          const track = {
-            id: 'track-' + state.nextTrackId++,
-            name: name.trim(),
-            type: 'normal',
-            capacity: getDefaultTrackCapacity(),
-            personIds: [],
-          }
-          state.tracks.push(track)
-          saveState()
           render()
         }
 
@@ -851,6 +907,7 @@
         function onDragStartPerson(ev, personId) {
           currentDragPersonId = personId
           ev.dataTransfer.effectAllowed = 'move'
+          setDropZoneActive(true)
         }
 
         function onDragEndPerson() {
@@ -859,6 +916,7 @@
           lists.forEach((el) => {
             el.classList.remove('drop-target')
           })
+          setDropZoneActive(false)
         }
 
         function onDragOverList(ev, trackId) {
@@ -883,6 +941,43 @@
           if (!currentDragPersonId) return
           movePersonToTrack(currentDragPersonId, trackId)
           currentDragPersonId = null
+          setDropZoneActive(false)
+        }
+
+        function onDragEnterDropZone(ev) {
+          if (!currentDragPersonId) return
+          ev.preventDefault()
+          const el = ev.currentTarget
+          el.classList.add('hover')
+          if (ev.dataTransfer) {
+            ev.dataTransfer.dropEffect = 'move'
+          }
+        }
+
+        function onDragOverDropZone(ev) {
+          if (!currentDragPersonId) return
+          ev.preventDefault()
+          const el = ev.currentTarget
+          el.classList.add('hover')
+          if (ev.dataTransfer) {
+            ev.dataTransfer.dropEffect = 'move'
+          }
+        }
+
+        function onDragLeaveDropZone(ev) {
+          const el = ev.currentTarget
+          el.classList.remove('hover')
+        }
+
+        function onDropOnDropZone(ev) {
+          ev.preventDefault()
+          const el = ev.currentTarget
+          el.classList.remove('hover')
+          if (!currentDragPersonId) return
+          const personId = currentDragPersonId
+          currentDragPersonId = null
+          createTrackFromPersonDrop(personId)
+          setDropZoneActive(false)
         }
 
         function render() {
@@ -1219,32 +1314,39 @@
                     return trackHasCapacity(t)
                   })
 
-                  if (moveCandidates.length) {
-                    const moveSelect = document.createElement('select')
-                    moveSelect.setAttribute('aria-label', 'Move to track')
+                  const moveSelect = document.createElement('select')
+                  moveSelect.setAttribute('aria-label', 'Move to track')
 
-                    const placeholderOption = document.createElement('option')
-                    placeholderOption.value = ''
-                    placeholderOption.textContent = 'Move…'
-                    placeholderOption.disabled = true
-                    placeholderOption.selected = true
-                    moveSelect.appendChild(placeholderOption)
+                  const placeholderOption = document.createElement('option')
+                  placeholderOption.value = ''
+                  placeholderOption.textContent = 'Move…'
+                  placeholderOption.disabled = true
+                  placeholderOption.selected = true
+                  moveSelect.appendChild(placeholderOption)
 
-                    for (const t of moveCandidates) {
-                      const opt = document.createElement('option')
-                      opt.value = t.id
-                      opt.textContent = t.name
-                      moveSelect.appendChild(opt)
-                    }
-
-                    moveSelect.addEventListener('change', (ev) => {
-                      const targetId = ev.target.value
-                      if (!targetId) return
-                      movePersonToTrack(person.id, targetId)
-                    })
-
-                    actions.appendChild(moveSelect)
+                  for (const t of moveCandidates) {
+                    const opt = document.createElement('option')
+                    opt.value = t.id
+                    opt.textContent = t.name
+                    moveSelect.appendChild(opt)
                   }
+
+                  const newTrackOption = document.createElement('option')
+                  newTrackOption.value = NEW_TRACK_OPTION_VALUE
+                  newTrackOption.textContent = '➕ New track…'
+                  moveSelect.appendChild(newTrackOption)
+
+                  moveSelect.addEventListener('change', (ev) => {
+                    const targetId = ev.target.value
+                    if (!targetId) return
+                    if (targetId === NEW_TRACK_OPTION_VALUE) {
+                      createTrackFromPersonDrop(person.id)
+                      return
+                    }
+                    movePersonToTrack(person.id, targetId)
+                  })
+
+                  actions.appendChild(moveSelect)
                 }
 
                 const retireBtn = document.createElement('button')
@@ -1286,6 +1388,23 @@
             trackEl.appendChild(peopleList)
             container.appendChild(trackEl)
           }
+
+          const dropZone = document.createElement('div')
+          dropZone.id = 'createTrackDropZone'
+          dropZone.className = 'create-track-drop-zone'
+          dropZone.textContent = 'Drop to create a new track'
+          dropZone.setAttribute('role', 'button')
+          dropZone.setAttribute('aria-hidden', currentDragPersonId ? 'false' : 'true')
+          dropZone.setAttribute('aria-label', 'Drop to create a new track')
+          dropZone.addEventListener('dragenter', onDragEnterDropZone)
+          dropZone.addEventListener('dragover', onDragOverDropZone)
+          dropZone.addEventListener('dragleave', onDragLeaveDropZone)
+          dropZone.addEventListener('drop', onDropOnDropZone)
+          if (currentDragPersonId) {
+            dropZone.classList.add('visible')
+          }
+
+          container.appendChild(dropZone)
         }
 
         function init() {
@@ -1299,11 +1418,6 @@
           const resetPlanButton = document.getElementById('resetPlanButton')
           if (resetPlanButton) {
             resetPlanButton.addEventListener('click', resetPlan)
-          }
-
-          const addTrackButton = document.getElementById('addTrackButton')
-          if (addTrackButton) {
-            addTrackButton.addEventListener('click', addTrack)
           }
 
           const deleteSelectedTracksButton = document.getElementById('deleteSelectedTracksButton')
