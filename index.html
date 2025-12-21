@@ -285,6 +285,106 @@
         background: var(--accent-soft);
       }
 
+      .roles-list {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        padding: 4px;
+        border-radius: 4px;
+        background: #f3f4f6;
+        min-height: 44px;
+        max-height: 200px;
+        overflow-y: auto;
+        margin-top: 6px;
+      }
+
+      .roles-list.empty {
+        font-size: 0.75rem;
+        color: var(--muted);
+        align-items: center;
+        justify-content: center;
+        display: flex;
+      }
+
+      .roles-list.drop-target {
+        outline: 2px dashed var(--accent);
+        background: var(--accent-soft);
+      }
+
+      .role-pill {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        padding: 8px 12px;
+        border-radius: 18px;
+        background: #ffffff;
+        border: 1px solid var(--border);
+        font-size: 0.8rem;
+      }
+
+      .role-info {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        min-width: 0;
+      }
+
+      .role-name {
+        font-weight: 600;
+        overflow-wrap: anywhere;
+      }
+
+      .role-color-dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: var(--accent);
+        border: 1px solid rgba(0, 0, 0, 0.05);
+      }
+
+      .role-actions {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+
+      .role-actions button,
+      .role-actions select {
+        padding: 2px 6px;
+        font-size: 0.7rem;
+      }
+
+      .role-delete {
+        border-color: var(--danger);
+        background: #ffffff;
+        color: var(--danger);
+      }
+
+      .person-actions,
+      .role-actions {
+        min-width: 0;
+      }
+
+      .person-actions .actions-left,
+      .role-actions .actions-left {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        flex-wrap: wrap;
+        flex: 1 1 auto;
+        min-width: 0;
+      }
+
+      .person-actions .actions-right,
+      .role-actions .actions-right {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        flex: 0 0 auto;
+      }
+
       .person {
         display: flex;
         align-items: flex-start;
@@ -307,10 +407,10 @@
 
       .person-actions {
         display: flex;
-        gap: 2px;
+        align-items: center;
+        gap: 8px;
         flex-wrap: wrap;
-        justify-content: flex-start;
-        flex: 0 0 auto;
+        justify-content: space-between;
       }
 
       .person-actions button {
@@ -321,12 +421,15 @@
       .person-actions .retire-button {
         border-color: var(--danger);
         color: var(--danger);
-        background: #fef2f2;
-        margin-left: 8px;
+        background: #ffffff;
+        margin-left: auto;
+        flex-shrink: 0;
       }
 
-      .person-actions .danger {
-        margin-left: 8px;
+      .person-actions .retire-button[data-state='confirm'] {
+        border-color: #2563eb;
+        color: #ffffff;
+        background: #2563eb;
       }
 
       .person-pending-retire {
@@ -339,14 +442,24 @@
         color: var(--danger);
       }
 
-      .person-actions select {
-        padding: 2px 4px;
+      .person-actions select,
+      .role-actions select {
+        padding: 2px 6px;
         font-size: 0.7rem;
-        max-width: 80px;
+        min-width: 110px;
+        flex: 0 0 110px;
+      }
+
+      @media (min-width: 640px) {
+        .person-actions,
+        .role-actions {
+          flex-wrap: nowrap;
+        }
       }
 
       @media (min-width: 768px) {
-        .person-actions button[data-label]::after {
+        .person-actions button[data-label]::after,
+        .role-actions button[data-label]::after {
           content: ' ' attr(data-label);
         }
       }
@@ -391,6 +504,8 @@
           <p>Plan pairs and mobs and reshuffle people quickly in your browser.</p>
         </div>
         <div class="controls">
+          <button id="addRoleButton" class="primary">Add role</button>
+          <button id="shuffleRolesButton" class="ghost" disabled>Shuffle roles</button>
           <button id="undoButton" class="ghost history-btn" disabled>Undo</button>
           <button id="redoButton" class="ghost history-btn" disabled>Redo</button>
           <button id="resetPlanButton" class="ghost">Reset plan</button>
@@ -438,13 +553,15 @@
 
         /**
          * @typedef {{ id: string, name: string }} Person
-         * @typedef {{ id: string, name: string, type: 'normal' | 'on_deck' | 'out_of_office', capacity: number | null, personIds: string[] }} Track
-         * @typedef {{ people: Person[], tracks: Track[], nextPersonId: number, nextTrackId: number, defaultTrackCapacity: number }} PlannerState
+         * @typedef {{ id: string, name: string, color: string | null }} Role
+         * @typedef {{ id: string, name: string, type: 'normal' | 'on_deck' | 'out_of_office', capacity: number | null, personIds: string[], roleIds: string[] }} Track
+         * @typedef {{ people: Person[], roles: Role[], tracks: Track[], nextPersonId: number, nextTrackId: number, nextRoleId: number, defaultTrackCapacity: number }} PlannerState
          */
 
         /** @type {PlannerState} */
         let state
         let currentDragPersonId = null
+        let currentDragRoleId = null
         let pendingRetirePersonId = null
         /** @type {Set<string>} */
         let selectedTrackIds = new Set()
@@ -465,6 +582,7 @@
 
           return {
             people: [],
+            roles: [],
             tracks: [
               {
                 id: 'on_deck',
@@ -472,6 +590,7 @@
                 type: 'on_deck',
                 capacity: null,
                 personIds: [],
+                roleIds: [],
               },
               {
                 id: 'out_of_office',
@@ -479,6 +598,7 @@
                 type: 'out_of_office',
                 capacity: null,
                 personIds: [],
+                roleIds: [],
               },
               {
                 id: 'track-1',
@@ -486,10 +606,12 @@
                 type: 'normal',
                 capacity: 2,
                 personIds: [],
+                roleIds: [],
               },
             ],
             nextPersonId: 1,
             nextTrackId: 2,
+            nextRoleId: 1,
             defaultTrackCapacity: 2,
           }
         }
@@ -522,8 +644,88 @@
             if (!parsed || !Array.isArray(parsed.people) || !Array.isArray(parsed.tracks)) {
               return createInitialState()
             }
+            if (!Array.isArray(parsed.roles)) {
+              parsed.roles = []
+            }
+            parsed.roles = parsed.roles.map((role, index) => {
+              const id = typeof role.id === 'string' && role.id.trim() ? role.id : `role-${index + 1}`
+              const name = typeof role.name === 'string' && role.name.trim() ? role.name.trim() : `Role ${index + 1}`
+              const color = typeof role.color === 'string' && role.color.trim() ? role.color.trim() : null
+              return { id, name, color }
+            })
+            const roleIdSet = new Set(parsed.roles.map((role) => role.id))
+            const assignedRoleIds = new Set()
+            const orphanRoleIds = []
+            const defaultCapacity =
+              typeof parsed.defaultTrackCapacity === 'number' && parsed.defaultTrackCapacity >= 1
+                ? parsed.defaultTrackCapacity
+                : 2
+
+            parsed.tracks = parsed.tracks.map((track, index) => {
+              const personIds = Array.isArray(track.personIds) ? track.personIds : []
+              let roleIds = Array.isArray(track.roleIds) ? track.roleIds.filter((id) => roleIdSet.has(id)) : []
+              if (track.type !== 'normal') {
+                if (roleIds.length) {
+                  orphanRoleIds.push(...roleIds)
+                }
+                return {
+                  ...track,
+                  personIds,
+                  roleIds: [],
+                }
+              }
+              roleIds.forEach((id) => assignedRoleIds.add(id))
+              return {
+                ...track,
+                id: typeof track.id === 'string' && track.id.trim() ? track.id : `track-${index}`,
+                name: typeof track.name === 'string' && track.name.trim() ? track.name : `Track ${index}`,
+                type: 'normal',
+                capacity:
+                  typeof track.capacity === 'number' && track.capacity >= 1
+                    ? track.capacity
+                    : track.capacity === null
+                      ? null
+                      : defaultCapacity,
+                personIds,
+                roleIds,
+              }
+            })
+
+            const normalTracks = parsed.tracks.filter((track) => track.type === 'normal')
+            if (!normalTracks.length) {
+              parsed.tracks.push({
+                id: 'track-1',
+                name: 'Track A',
+                type: 'normal',
+                capacity: 2,
+                personIds: [],
+                roleIds: [],
+              })
+            }
+
+            const fallbackTrack = parsed.tracks.find((track) => track.type === 'normal')
+            if (fallbackTrack) {
+              const unassignedRoleIds = parsed.roles
+                .map((role) => role.id)
+                .filter((id) => !assignedRoleIds.has(id))
+              const unique = new Set([...fallbackTrack.roleIds, ...orphanRoleIds, ...unassignedRoleIds])
+              fallbackTrack.roleIds = Array.from(unique)
+            }
+
             if (typeof parsed.nextPersonId !== 'number') parsed.nextPersonId = 1
-            if (typeof parsed.nextTrackId !== 'number') parsed.nextTrackId = 1
+            if (typeof parsed.nextTrackId !== 'number') parsed.nextTrackId = Math.max(
+              1,
+              ...parsed.tracks
+                .map((track) => Number(String(track.id).replace(/[^0-9]/g, '')))
+                .filter((value) => !Number.isNaN(value)),
+            ) + 1
+            if (typeof parsed.nextRoleId !== 'number') {
+              const highestRoleNumber = parsed.roles
+                .map((role) => Number(String(role.id).replace(/[^0-9]/g, '')))
+                .filter((value) => !Number.isNaN(value))
+                .reduce((max, value) => Math.max(max, value), 0)
+              parsed.nextRoleId = highestRoleNumber + 1
+            }
             if (typeof parsed.defaultTrackCapacity !== 'number' || parsed.defaultTrackCapacity < 1) {
               parsed.defaultTrackCapacity = 2
             }
@@ -554,6 +756,14 @@
           return state.people.find((p) => p.id === id) || null
         }
 
+        function getRoleById(id) {
+          return state.roles.find((r) => r.id === id) || null
+        }
+
+        function findRoleTrack(roleId) {
+          return state.tracks.find((track) => Array.isArray(track.roleIds) && track.roleIds.includes(roleId)) || null
+        }
+
         function updatePersonName(personId, newName) {
           const person = getPersonById(personId)
           if (!person) return false
@@ -570,6 +780,10 @@
         function trackHasCapacity(track) {
           if (track.capacity == null) return true
           return track.personIds.length < track.capacity
+        }
+
+        function getNormalTracks() {
+          return state.tracks.filter((track) => track.type === 'normal')
         }
 
         function generateAutomaticTrackName(counter = state.nextTrackId) {
@@ -593,6 +807,39 @@
           }
         }
 
+        function createNormalTrack({ name, capacity, personIds = [], roleIds = [] } = {}) {
+          const trackNumber = state.nextTrackId++
+          const track = {
+            id: 'track-' + trackNumber,
+            name: name || generateAutomaticTrackName(trackNumber),
+            type: 'normal',
+            capacity:
+              capacity === null
+                ? null
+                : typeof capacity === 'number' && capacity >= 1
+                  ? capacity
+                  : state.defaultTrackCapacity,
+            personIds: Array.isArray(personIds) ? [...personIds] : [],
+            roleIds: Array.isArray(roleIds) ? [...roleIds] : [],
+          }
+          state.tracks.push(track)
+          return track
+        }
+
+        function ensureNormalTrack(preferredTrackId) {
+          if (preferredTrackId) {
+            const preferred = getTrackById(preferredTrackId)
+            if (preferred && preferred.type === 'normal') {
+              return preferred
+            }
+          }
+          const normalTracks = getNormalTracks()
+          if (normalTracks.length) {
+            return normalTracks[0]
+          }
+          return createNormalTrack()
+        }
+
         function createTrackFromPersonDrop(personId) {
           const person = getPersonById(personId)
           if (!person) return false
@@ -603,19 +850,8 @@
               sourceTrack.personIds = sourceTrack.personIds.filter((id) => id !== personId)
             }
 
-            const trackCounter = state.nextTrackId++
-            const newTrackId = 'track-' + trackCounter
-            const trackName = generateAutomaticTrackName(trackCounter)
-            const newTrack = {
-              id: newTrackId,
-              name: trackName,
-              type: 'normal',
-              capacity: null,
-              personIds: [personId],
-            }
-
-            state.tracks.push(newTrack)
-            return true
+            const newTrack = createNormalTrack({ capacity: null, personIds: [personId] })
+            return Boolean(newTrack)
           })
         }
 
@@ -969,6 +1205,9 @@
           mutateState('Reset plan', () => {
             state = createInitialState()
             selectedTrackIds = new Set()
+            currentDragPersonId = null
+            currentDragRoleId = null
+            pendingRetirePersonId = null
             return true
           })
         }
@@ -979,12 +1218,14 @@
           const createdTrackIds = []
 
           while (remaining > 0) {
+            const trackNumber = state.nextTrackId++
             const track = {
-              id: 'track-' + state.nextTrackId++,
-              name: `Extra Track ${state.nextTrackId - 1}`,
+              id: 'track-' + trackNumber,
+              name: `Extra Track ${trackNumber}`,
               type: 'normal',
               capacity: defaultCapacity,
               personIds: [],
+              roleIds: [],
             }
             state.tracks.push(track)
             createdTrackIds.push(track.id)
@@ -1026,6 +1267,125 @@
           return mutateState(description, () =>
             movePersonToTrackInternal(personId, targetTrackId),
           )
+        }
+
+        function updateRoleName(roleId, newName) {
+          const role = getRoleById(roleId)
+          if (!role) return false
+          const trimmed = newName.trim()
+          if (!trimmed || trimmed === role.name) return false
+          return mutateState(`Rename role ${role.name} to ${trimmed}`, () => {
+            role.name = trimmed
+            return true
+          })
+        }
+
+        function moveRoleToTrackInternal(roleId, targetTrackId) {
+          const role = getRoleById(roleId)
+          const target = getTrackById(targetTrackId)
+          if (!role || !target || target.type !== 'normal') return false
+          const currentTrack = findRoleTrack(roleId)
+          if (currentTrack && currentTrack.id === targetTrackId) {
+            return false
+          }
+          if (currentTrack) {
+            currentTrack.roleIds = currentTrack.roleIds.filter((id) => id !== roleId)
+          }
+          if (!target.roleIds.includes(roleId)) {
+            target.roleIds.push(roleId)
+          }
+          return true
+        }
+
+        function moveRoleToTrack(roleId, targetTrackId, options = {}) {
+          const role = getRoleById(roleId)
+          const target = getTrackById(targetTrackId)
+          if (!role || !target || target.type !== 'normal') return false
+          const description =
+            options.description || `Move role ${role.name} to ${target.name}`
+          return mutateState(description, () =>
+            moveRoleToTrackInternal(roleId, targetTrackId),
+          )
+        }
+
+        function createRole({ name, color = null, targetTrackId } = {}) {
+          const trimmed = (name || '').trim()
+          if (!trimmed) return false
+          const normalizedColor = color && color.trim() ? color.trim() : null
+          return mutateState(`Add role ${trimmed}`, () => {
+            const role = {
+              id: 'role-' + state.nextRoleId++,
+              name: trimmed,
+              color: normalizedColor,
+            }
+            state.roles.push(role)
+            const destination = ensureNormalTrack(targetTrackId)
+            if (destination) {
+              if (!destination.roleIds.includes(role.id)) {
+                destination.roleIds.push(role.id)
+              }
+            }
+            return true
+          })
+        }
+
+        function deleteRole(roleId) {
+          const role = getRoleById(roleId)
+          if (!role) return false
+          return mutateState(`Delete role ${role.name}`, () => {
+            state.roles = state.roles.filter((r) => r.id !== roleId)
+            for (const track of state.tracks) {
+              if (Array.isArray(track.roleIds) && track.roleIds.includes(roleId)) {
+                track.roleIds = track.roleIds.filter((id) => id !== roleId)
+              }
+            }
+            return true
+          })
+        }
+
+        function shuffleRole(roleId) {
+          const role = getRoleById(roleId)
+          if (!role) return false
+          return mutateState(`Shuffle role ${role.name}`, () => {
+            const currentTrack = findRoleTrack(roleId)
+            const candidates = getNormalTracks().filter((track) =>
+              currentTrack ? track.id !== currentTrack.id : true,
+            )
+            if (!candidates.length) return false
+            const target = candidates[Math.floor(Math.random() * candidates.length)]
+            return moveRoleToTrackInternal(roleId, target.id)
+          })
+        }
+
+        function shuffleAllRoles() {
+          if (!state.roles.length) return false
+          return mutateState('Shuffle all roles', () => {
+            const normalTracks = getNormalTracks()
+            if (!normalTracks.length) return false
+            const roleIds = state.roles.map((role) => role.id)
+            if (roleIds.length <= 1 && normalTracks.length <= 1) {
+              return false
+            }
+            const previousAssignments = normalTracks.map((track) => [...track.roleIds])
+            const shuffled = [...roleIds]
+            for (let i = shuffled.length - 1; i > 0; i--) {
+              const j = Math.floor(Math.random() * (i + 1))
+              ;[shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]
+            }
+            normalTracks.forEach((track) => {
+              track.roleIds = []
+            })
+            shuffled.forEach((roleId, index) => {
+              const target = normalTracks[index % normalTracks.length]
+              target.roleIds.push(roleId)
+            })
+            const changed = normalTracks.some((track, index) => {
+              const previous = previousAssignments[index] || []
+              if (previous.length !== track.roleIds.length) return true
+              return previous.some((id, idx) => id !== track.roleIds[idx])
+            })
+            return changed
+          })
         }
 
         function sweepTrackKeepOneInternal(track, onDeck) {
@@ -1142,6 +1502,18 @@
           if (!onDeck) return false
           const description = `Delete track ${track.name}`
           return mutateState(description, () => {
+            const rolesToReassign = Array.isArray(track.roleIds) ? [...track.roleIds] : []
+            let fallback = state.tracks.find((t) => t.type === 'normal' && t.id !== trackId)
+            if (!fallback && rolesToReassign.length) {
+              fallback = createNormalTrack()
+            }
+            if (fallback && rolesToReassign.length) {
+              for (const roleId of rolesToReassign) {
+                if (!fallback.roleIds.includes(roleId)) {
+                  fallback.roleIds.push(roleId)
+                }
+              }
+            }
             onDeck.personIds.push(...track.personIds)
             state.tracks = state.tracks.filter((t) => t.id !== trackId)
             selectedTrackIds.delete(trackId)
@@ -1157,12 +1529,21 @@
           if (!normalTracks.length) return false
 
           return mutateState(`Delete all ${normalTracks.length} track(s)`, () => {
+            const rolesToReassign = []
             for (const track of normalTracks) {
               onDeck.personIds.push(...track.personIds)
+              if (Array.isArray(track.roleIds) && track.roleIds.length) {
+                rolesToReassign.push(...track.roleIds)
+              }
             }
 
             state.tracks = state.tracks.filter((t) => t.type !== 'normal')
             selectedTrackIds.clear()
+
+            if (rolesToReassign.length) {
+              createNormalTrack({ roleIds: Array.from(new Set(rolesToReassign)) })
+            }
+
             return true
           })
 
@@ -1183,14 +1564,34 @@
               : `Delete ${tracksToDelete.length} selected tracks`
 
           return mutateState(description, () => {
+            const rolesToReassign = []
             for (const track of tracksToDelete) {
               onDeck.personIds.push(...track.personIds)
+              if (Array.isArray(track.roleIds) && track.roleIds.length) {
+                rolesToReassign.push(...track.roleIds)
+              }
             }
 
             state.tracks = state.tracks.filter(
               (t) => !(t.type === 'normal' && selectedTrackIds.has(t.id)),
             )
             selectedTrackIds.clear()
+
+            if (rolesToReassign.length) {
+              let fallback = state.tracks.find((t) => t.type === 'normal')
+              if (!fallback) {
+                fallback = createNormalTrack()
+              }
+              if (fallback) {
+                const uniqueRoleIds = new Set(fallback.roleIds)
+                for (const roleId of rolesToReassign) {
+                  if (!uniqueRoleIds.has(roleId)) {
+                    fallback.roleIds.push(roleId)
+                    uniqueRoleIds.add(roleId)
+                  }
+                }
+              }
+            }
 
             return true
           })
@@ -1394,6 +1795,47 @@
           setDropZoneActive(false)
         }
 
+        function onDragStartRole(ev, roleId) {
+          currentDragRoleId = roleId
+          if (ev.dataTransfer) {
+            ev.dataTransfer.effectAllowed = 'move'
+          }
+        }
+
+        function onDragEndRole() {
+          currentDragRoleId = null
+          const lists = document.querySelectorAll('.roles-list')
+          lists.forEach((el) => {
+            el.classList.remove('drop-target')
+          })
+        }
+
+        function onDragOverRolesList(ev, trackId) {
+          if (!currentDragRoleId) return
+          const track = getTrackById(trackId)
+          if (!track || track.type !== 'normal') return
+          ev.preventDefault()
+          if (ev.dataTransfer) {
+            ev.dataTransfer.dropEffect = 'move'
+          }
+          const el = ev.currentTarget
+          el.classList.add('drop-target')
+        }
+
+        function onDragLeaveRolesList(ev) {
+          const el = ev.currentTarget
+          el.classList.remove('drop-target')
+        }
+
+        function onDropOnRolesList(ev, trackId) {
+          ev.preventDefault()
+          const el = ev.currentTarget
+          el.classList.remove('drop-target')
+          if (!currentDragRoleId) return
+          moveRoleToTrack(currentDragRoleId, trackId)
+          currentDragRoleId = null
+        }
+
         function render() {
           const container = document.getElementById('tracksContainer')
           if (!container) return
@@ -1426,6 +1868,13 @@
           if (deleteAllTracksButton) {
             const hasAnyNormalTrack = state.tracks.some((t) => t.type === 'normal')
             deleteAllTracksButton.disabled = !hasAnyNormalTrack
+          }
+
+          const shuffleRolesButton = document.getElementById('shuffleRolesButton')
+          if (shuffleRolesButton) {
+            const hasRoles = state.roles.length > 0
+            const hasNormalTrack = state.tracks.some((t) => t.type === 'normal')
+            shuffleRolesButton.disabled = !(hasRoles && hasNormalTrack)
           }
 
           const capacityNotice = document.getElementById('capacityNotice')
@@ -1497,15 +1946,6 @@
             titleSpan.className = 'track-title'
             titleSpan.textContent = track.name
 
-            if (track.type === 'normal') {
-              titleSpan.style.cursor = 'pointer'
-              titleSpan.title = 'Click to rename track'
-              titleSpan.addEventListener('click', () => {
-                const newName = prompt('New track name?', track.name)
-                if (!newName) return
-                updateTrackName(track.id, newName)
-              })
-            }
 
             headerRow.appendChild(titleSpan)
 
@@ -1535,6 +1975,13 @@
                 ? `${assigned} assigned`
                 : `${assigned} / ${capacityLabel} assigned`
             metaRow.appendChild(countSpan)
+
+            if (track.type === 'normal') {
+              const rolesCountSpan = document.createElement('span')
+              const roleCount = track.roleIds.length
+              rolesCountSpan.textContent = `${roleCount} role${roleCount === 1 ? '' : 's'}`
+              metaRow.appendChild(rolesCountSpan)
+            }
 
             const isFull =
               track.type === 'normal' &&
@@ -1603,6 +2050,18 @@
               })
               actionsRow.appendChild(sweepAllocBtn)
             } else if (track.type === 'normal') {
+              actionsRow.style.display = 'flex'
+              actionsRow.style.justifyContent = 'space-between'
+              actionsRow.style.alignItems = 'center'
+              actionsRow.style.gap = '8px'
+              actionsRow.style.flexWrap = 'wrap'
+
+              const leftActions = document.createElement('div')
+              leftActions.style.display = 'flex'
+              leftActions.style.flex = '1'
+              leftActions.style.gap = '6px'
+              leftActions.style.flexWrap = 'wrap'
+
               const sweepBtn = document.createElement('button')
               sweepBtn.textContent = '⬅️ Sweep (keep one)'
               sweepBtn.title = 'Sweep everyone but one back to On Deck'
@@ -1611,10 +2070,10 @@
                 sweepTrackKeepOne(track.id)
               })
               sweepBtn.disabled = track.personIds.length <= 1
-              actionsRow.appendChild(sweepBtn)
-            }
+              leftActions.appendChild(sweepBtn)
 
-            if (track.type === 'normal') {
+              actionsRow.appendChild(leftActions)
+
               const deleteBtn = document.createElement('button')
               deleteBtn.textContent = 'Delete track'
               deleteBtn.className = 'danger'
@@ -1673,7 +2132,14 @@
                 const actions = document.createElement('div')
                 actions.className = 'person-actions'
 
+                const actionsLeft = document.createElement('div')
+                actionsLeft.className = 'actions-left'
+
+                const actionsRight = document.createElement('div')
+                actionsRight.className = 'actions-right'
+
                 const isPendingRetire = pendingRetirePersonId === person.id
+
 
                 if (isPendingRetire) {
                   personEl.classList.add('person-pending-retire')
@@ -1688,7 +2154,7 @@
                   shuffleBtn.addEventListener('click', () => {
                     shufflePerson(person.id)
                   })
-                  actions.appendChild(shuffleBtn)
+                  actionsLeft.appendChild(shuffleBtn)
 
                   if (track.type !== 'on_deck') {
                     const sweepBtn = document.createElement('button')
@@ -1697,7 +2163,7 @@
                     sweepBtn.addEventListener('click', () => {
                       sweepPerson(person.id)
                     })
-                    actions.appendChild(sweepBtn)
+                    actionsLeft.appendChild(sweepBtn)
                   }
 
                   const moveCandidates = state.tracks.filter((t) => {
@@ -1738,13 +2204,14 @@
                     movePersonToTrack(person.id, targetId)
                   })
 
-                  actions.appendChild(moveSelect)
+                  actionsLeft.appendChild(moveSelect)
                 }
 
                 const retireBtn = document.createElement('button')
                 if (isPendingRetire) {
                   retireBtn.textContent = '✅'
-                  retireBtn.className = 'danger'
+                  retireBtn.className = 'retire-button'
+                  retireBtn.dataset.state = 'confirm'
                   retireBtn.title = `Confirm retire ${person.name}`
                 } else {
                   retireBtn.textContent = '👋'
@@ -1759,7 +2226,7 @@
                     render()
                   }
                 })
-                actions.appendChild(retireBtn)
+                actionsRight.appendChild(retireBtn)
 
                 if (isPendingRetire) {
                   const cancelRetireBtn = document.createElement('button')
@@ -1769,8 +2236,11 @@
                     pendingRetirePersonId = null
                     render()
                   })
-                  actions.appendChild(cancelRetireBtn)
+                  actionsRight.appendChild(cancelRetireBtn)
                 }
+
+                actions.appendChild(actionsLeft)
+                actions.appendChild(actionsRight)
 
                 personEl.appendChild(actions)
                 peopleList.appendChild(personEl)
@@ -1778,6 +2248,144 @@
             }
 
             trackEl.appendChild(peopleList)
+
+            const rolesList = document.createElement('div')
+            rolesList.className = 'roles-list'
+            rolesList.dataset.trackId = track.id
+            if (track.type === 'normal') {
+              rolesList.addEventListener('dragover', (ev) =>
+                onDragOverRolesList(ev, track.id),
+              )
+              rolesList.addEventListener('dragleave', onDragLeaveRolesList)
+              rolesList.addEventListener('drop', (ev) =>
+                onDropOnRolesList(ev, track.id),
+              )
+              if (!track.roleIds.length) {
+                rolesList.classList.add('empty')
+                const emptyRole = document.createElement('span')
+                emptyRole.className = 'muted'
+                emptyRole.textContent = 'No roles'
+                rolesList.appendChild(emptyRole)
+              } else {
+                for (const roleId of track.roleIds) {
+                  const role = getRoleById(roleId)
+                  if (!role) continue
+                  const roleEl = document.createElement('div')
+                  roleEl.className = 'role-pill'
+                  roleEl.dataset.roleId = role.id
+                  roleEl.draggable = true
+                  roleEl.addEventListener('dragstart', (ev) =>
+                    onDragStartRole(ev, role.id),
+                  )
+                  roleEl.addEventListener('dragend', onDragEndRole)
+
+                  const roleInfo = document.createElement('div')
+                  roleInfo.className = 'role-info'
+                  const colorDot = document.createElement('span')
+                  colorDot.className = 'role-color-dot'
+                  colorDot.style.background = role.color || 'var(--accent)'
+                  roleInfo.appendChild(colorDot)
+
+                  const roleName = document.createElement('span')
+                  roleName.className = 'role-name'
+                  roleName.textContent = role.name
+                  roleName.title = 'Click to rename role'
+                  roleName.style.cursor = 'pointer'
+                  roleName.addEventListener('click', () => {
+                    const newName = prompt('New role name?', role.name)
+                    if (!newName) return
+                    updateRoleName(role.id, newName)
+                  })
+                  roleInfo.appendChild(roleName)
+
+                  const roleActions = document.createElement('div')
+                  roleActions.className = 'role-actions'
+
+                  const roleActionsLeft = document.createElement('div')
+                  roleActionsLeft.className = 'actions-left'
+
+                  const roleActionsRight = document.createElement('div')
+                  roleActionsRight.className = 'actions-right'
+
+                  const shuffleBtn = document.createElement('button')
+                  shuffleBtn.textContent = '🔀'
+                  shuffleBtn.title = 'Shuffle role to another track'
+                  shuffleBtn.className = 'primary'
+                  shuffleBtn.dataset.label = 'Shuffle'
+                  shuffleBtn.addEventListener('click', () => {
+                    shuffleRole(role.id)
+                  })
+                  roleActionsLeft.appendChild(shuffleBtn)
+
+
+                  const moveSelect = document.createElement('select')
+
+                  moveSelect.setAttribute('aria-label', 'Move role to track')
+
+                  const movePlaceholder = document.createElement('option')
+                  movePlaceholder.value = ''
+                  movePlaceholder.textContent = 'Move…'
+                  movePlaceholder.disabled = true
+                  movePlaceholder.selected = true
+                  moveSelect.appendChild(movePlaceholder)
+
+                  const roleMoveCandidates = state.tracks.filter(
+                    (t) => t.type === 'normal' && t.id !== track.id,
+                  )
+                  for (const candidate of roleMoveCandidates) {
+                    const opt = document.createElement('option')
+                    opt.value = candidate.id
+                    opt.textContent = candidate.name
+                    moveSelect.appendChild(opt)
+                  }
+
+                  const newRoleTrackOption = document.createElement('option')
+                  newRoleTrackOption.value = NEW_TRACK_OPTION_VALUE
+                  newRoleTrackOption.textContent = '➕ New track…'
+                  moveSelect.appendChild(newRoleTrackOption)
+
+                  moveSelect.addEventListener('change', (ev) => {
+                    const targetId = ev.target.value
+                    if (!targetId) return
+                    if (targetId === NEW_TRACK_OPTION_VALUE) {
+                      mutateState(`Create track for role ${role.name}`, () => {
+                        const newTrack = createNormalTrack()
+                        if (!newTrack) return false
+                        return moveRoleToTrackInternal(role.id, newTrack.id)
+                      })
+                    } else {
+                      moveRoleToTrack(role.id, targetId)
+                    }
+                    ev.target.value = ''
+                  })
+                  roleActionsLeft.appendChild(moveSelect)
+
+                  const deleteBtn = document.createElement('button')
+                  deleteBtn.textContent = '🗑️'
+                  deleteBtn.className = 'role-delete'
+                  deleteBtn.title = `Delete role ${role.name}`
+                  deleteBtn.addEventListener('click', () => {
+                    deleteRole(role.id)
+                  })
+                  roleActionsRight.appendChild(deleteBtn)
+
+                  roleActions.appendChild(roleActionsLeft)
+                  roleActions.appendChild(roleActionsRight)
+
+                  roleEl.appendChild(roleInfo)
+                  roleEl.appendChild(roleActions)
+                  rolesList.appendChild(roleEl)
+                }
+              }
+            } else {
+              rolesList.classList.add('empty')
+              const unavailable = document.createElement('span')
+              unavailable.className = 'muted'
+              unavailable.textContent = 'Roles unavailable'
+              rolesList.appendChild(unavailable)
+            }
+
+            trackEl.appendChild(rolesList)
             container.appendChild(trackEl)
           }
 
@@ -1836,6 +2444,27 @@
           const resetPlanButton = document.getElementById('resetPlanButton')
           if (resetPlanButton) {
             resetPlanButton.addEventListener('click', resetPlan)
+          }
+
+          const addRoleButton = document.getElementById('addRoleButton')
+          if (addRoleButton) {
+            addRoleButton.addEventListener('click', () => {
+              const roleName = prompt('Role name?')
+              if (!roleName || !roleName.trim()) return
+              const colorInput = prompt(
+                'Role accent color (optional, leave blank for default):',
+                '',
+              )
+              const color = colorInput && colorInput.trim() ? colorInput.trim() : null
+              createRole({ name: roleName, color })
+            })
+          }
+
+          const shuffleRolesButtonEl = document.getElementById('shuffleRolesButton')
+          if (shuffleRolesButtonEl) {
+            shuffleRolesButtonEl.addEventListener('click', () => {
+              shuffleAllRoles()
+            })
           }
 
           const deleteSelectedTracksButton = document.getElementById('deleteSelectedTracksButton')
