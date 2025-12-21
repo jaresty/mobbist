@@ -1,6 +1,6 @@
 # ADR: Drag-to-Create Track Affordance
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2025-12-20
 - Owners: Docs app maintainers
 - Related:
@@ -27,13 +27,13 @@ Introduce a drag-sensitive drop zone directly after the final normal track. When
   - Creates a new `normal` track appended after all other normal tracks but before the trailing drop zone.
   - Generates a new track identifier using the existing ID generator used for normal tracks.
   - Seeds the track with the dropped person and sets `capacity: null` (unlimited) until the user edits it.
-  - Opens an inline rename input immediately after creation; if the user dismisses it without changes, the track keeps an auto-generated name following the current naming scheme (for example, "Track F").
+  - Assigns an auto-generated name following the current naming scheme (for example, "Track F"); users can rename later via the existing track title interaction.
 - **Persistence**
   - The new track and the repositioned person are written to local storage in the same transaction as other drag-and-drop updates.
   - Undo/redo support (see separate ADR) will treat the creation-drop sequence as a single action so it can be reverted cleanly.
 - **Accessibility**
   - The drop zone is announced to assistive technologies when it becomes available, with instructions describing that dropping will create a track.
-  - A fallback "Add track" command remains available from the command menu and via keyboard shortcut to cover scenarios where drag-and-drop is unavailable or undesired, keeping parity with accessibility expectations without exposing the button visually.
+  - A fallback "Add track" command remains available from the command menu and via keyboard shortcut, and the "Move…" dropdown on each person now includes a "➕ New track…" choice so keyboard users without drag-and-drop support can still create tracks.
 
 ## Alternatives Considered
 
@@ -60,7 +60,6 @@ Introduce a drag-sensitive drop zone directly after the final normal track. When
 
 ## Follow-Ups
 
-- Implement the drop zone component and integrate it with the existing drag-and-drop system.
 - Add copy and animation that make the creation affordance discoverable (e.g., a gentle pulse when a drag starts).
-- Update help text and onboarding to mention the new creation flow and the command palette fallback.
+- Update help text and onboarding to mention the new creation flow, command palette fallback, and "New track" dropdown option.
 - Instrument analytics (if available) to confirm users still succeed at adding tracks post-change.

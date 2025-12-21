@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Mobbist</title>
-    <style>
+      <style>
       :root {
         --bg: #f4f4f4;
         --card-bg: #ffffff;
@@ -55,6 +55,11 @@
         flex-wrap: wrap;
         gap: 8px;
         align-items: center;
+      }
+
+      .controls .history-btn {
+        min-width: 160px;
+        text-align: left;
       }
 
       textarea {
@@ -141,6 +146,57 @@
         background: var(--accent);
         color: #ffffff;
         border-color: var(--accent);
+      }
+
+      .visually-hidden {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
+      }
+
+      .history-animation-layer {
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        overflow: visible;
+        z-index: 999;
+      }
+
+      .history-ghost {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 8px;
+        border-radius: 6px;
+        background: #ffffff;
+        box-shadow: 0 0 0 2px var(--accent);
+        font-size: 0.85rem;
+        color: #111827;
+        pointer-events: none;
+        transform: translate(0, 0);
+        opacity: 1;
+        transform-origin: top left;
+        white-space: nowrap;
+        will-change: transform, opacity;
+      }
+
+      .person.history-flash {
+        animation: historyFlash 600ms ease;
+      }
+
+      @keyframes historyFlash {
+        from {
+          background: var(--accent-soft);
+        }
+        to {
+          background: #ffffff;
+        }
       }
 
       .track {
@@ -335,6 +391,8 @@
           <p>Plan pairs and mobs and reshuffle people quickly in your browser.</p>
         </div>
         <div class="controls">
+          <button id="undoButton" class="ghost history-btn" disabled>Undo</button>
+          <button id="redoButton" class="ghost history-btn" disabled>Redo</button>
           <button id="resetPlanButton" class="ghost">Reset plan</button>
         </div>
       </div>
@@ -367,6 +425,8 @@
       </section>
 
       <section id="tracksContainer" class="tracks-grid" aria-label="Tracks"></section>
+      <div id="historyAnnouncer" class="visually-hidden" aria-live="polite" aria-atomic="true"></div>
+      <div id="historyOverlay" class="history-animation-layer"></div>
     </main>
 
     <script>
@@ -374,6 +434,7 @@
         const STORAGE_KEY = 'mobbist:v1'
         const LEGACY_STORAGE_KEYS = ['pairPlanner:v1']
         const NEW_TRACK_OPTION_VALUE = '__create_new_track__'
+        const HISTORY_LIMIT = 30
 
         /**
          * @typedef {{ id: string, name: string }} Person
@@ -385,11 +446,23 @@
         let state
         let currentDragPersonId = null
         let pendingRetirePersonId = null
-        let pendingDeleteTrackId = null
         /** @type {Set<string>} */
         let selectedTrackIds = new Set()
+        /** @type {{ description: string, state: PlannerState }[]} */
+        let undoStack = []
+        /** @type {{ description: string, state: PlannerState }[]} */
+        let redoStack = []
+        let pendingHistoryAnnouncement = ''
+        let pendingAnimationPositions = null
+        let pendingAnimatedPersonIds = null
+        let historyAnnouncerEl = null
+        let undoButtonEl = null
+        let redoButtonEl = null
+        let historyShortcutBound = false
+        let historyOverlayEl = null
 
         function createInitialState() {
+
           return {
             people: [],
             tracks: [
@@ -419,6 +492,20 @@
             nextTrackId: 2,
             defaultTrackCapacity: 2,
           }
+        }
+
+        function ensureHistoryOverlay() {
+          if (historyOverlayEl && document.body.contains(historyOverlayEl)) {
+            return historyOverlayEl
+          }
+          historyOverlayEl = document.getElementById('historyOverlay')
+          if (!historyOverlayEl) {
+            historyOverlayEl = document.createElement('div')
+            historyOverlayEl.id = 'historyOverlay'
+            historyOverlayEl.className = 'history-animation-layer'
+            document.body.appendChild(historyOverlayEl)
+          }
+          return historyOverlayEl
         }
 
         function loadState() {
@@ -469,12 +556,15 @@
 
         function updatePersonName(personId, newName) {
           const person = getPersonById(personId)
-          if (!person) return
+          if (!person) return false
           const trimmed = newName.trim()
-          if (!trimmed) return
-          person.name = trimmed
-          saveState()
-          render()
+          if (!trimmed) return false
+          const previousName = person.name
+          if (trimmed === previousName) return false
+          return mutateState(`Rename ${previousName} to ${trimmed}`, () => {
+            person.name = trimmed
+            return true
+          })
         }
 
         function trackHasCapacity(track) {
@@ -505,27 +595,334 @@
 
         function createTrackFromPersonDrop(personId) {
           const person = getPersonById(personId)
-          if (!person) return
+          if (!person) return false
+          const description = `Create track for ${person.name}`
+          return mutateState(description, () => {
+            const sourceTrack = state.tracks.find((t) => t.personIds.includes(personId))
+            if (sourceTrack) {
+              sourceTrack.personIds = sourceTrack.personIds.filter((id) => id !== personId)
+            }
 
-          const sourceTrack = state.tracks.find((t) => t.personIds.includes(personId))
-          if (sourceTrack) {
-            sourceTrack.personIds = sourceTrack.personIds.filter((id) => id !== personId)
+            const trackCounter = state.nextTrackId++
+            const newTrackId = 'track-' + trackCounter
+            const trackName = generateAutomaticTrackName(trackCounter)
+            const newTrack = {
+              id: newTrackId,
+              name: trackName,
+              type: 'normal',
+              capacity: null,
+              personIds: [personId],
+            }
+
+            state.tracks.push(newTrack)
+            return true
+          })
+        }
+
+        function snapshotPlannerState(source = state) {
+          return JSON.parse(JSON.stringify(source))
+        }
+
+        function buildTrackAssignments(snapshot) {
+          const assignments = new Map()
+          snapshot.tracks.forEach((track) => {
+            track.personIds.forEach((personId, index) => {
+              assignments.set(personId, { trackId: track.id, index })
+            })
+          })
+          return assignments
+        }
+
+        function shouldAnimatePerson(personId) {
+          if (!pendingAnimatedPersonIds) return true
+          return pendingAnimatedPersonIds.has(personId)
+        }
+
+        function announceHistory(message) {
+          if (!message) return
+          pendingHistoryAnnouncement = message
+        }
+
+        function mutateState(description, mutator) {
+          pendingAnimatedPersonIds = null
+          const previousPositions = capturePersonPositions()
+          const previousState = snapshotPlannerState()
+          const previousSerialized = JSON.stringify(previousState)
+          const result = mutator()
+          if (result === false) return false
+          const nextSerialized = JSON.stringify(state)
+          if (previousSerialized === nextSerialized) {
+            return result
           }
-
-          const trackCounter = state.nextTrackId++
-          const newTrackId = 'track-' + trackCounter
-          const trackName = generateAutomaticTrackName(trackCounter)
-          const newTrack = {
-            id: newTrackId,
-            name: trackName,
-            type: 'normal',
-            capacity: null,
-            personIds: [personId],
+          const prevAssignments = buildTrackAssignments(previousState)
+          const nextAssignments = buildTrackAssignments(state)
+          const animatedIds = new Set()
+          prevAssignments.forEach((info, personId) => {
+            const nextInfo = nextAssignments.get(personId)
+            if (!nextInfo || nextInfo.trackId !== info.trackId) {
+              animatedIds.add(personId)
+            }
+          })
+          nextAssignments.forEach((info, personId) => {
+            if (!prevAssignments.has(personId)) {
+              animatedIds.add(personId)
+            }
+          })
+          pendingAnimatedPersonIds = animatedIds.size ? animatedIds : null
+          pendingAnimationPositions = previousPositions
+          undoStack.push({ description, state: previousState })
+          if (undoStack.length > HISTORY_LIMIT) {
+            undoStack.shift()
           }
-
-          state.tracks.push(newTrack)
+          redoStack = []
+          announceHistory(`${description}. Undo available.`)
           saveState()
           render()
+          return result
+        }
+
+        function updateHistoryControls() {
+          if (!undoButtonEl || !redoButtonEl) return
+          const undoEntry = undoStack[undoStack.length - 1] || null
+          const redoEntry = redoStack[redoStack.length - 1] || null
+          undoButtonEl.disabled = !undoEntry
+          redoButtonEl.disabled = !redoEntry
+          undoButtonEl.textContent = undoEntry ? `Undo ${undoEntry.description}` : 'Undo'
+          redoButtonEl.textContent = redoEntry ? `Redo ${redoEntry.description}` : 'Redo'
+          undoButtonEl.setAttribute('aria-disabled', undoButtonEl.disabled ? 'true' : 'false')
+          redoButtonEl.setAttribute('aria-disabled', redoButtonEl.disabled ? 'true' : 'false')
+
+        }
+
+        function capturePersonPositions() {
+          const positions = {}
+          const peopleEls = document.querySelectorAll('.person')
+          peopleEls.forEach((el) => {
+            const personId = el.dataset.personId
+            if (!personId) return
+            const rect = el.getBoundingClientRect()
+            const nameEl = el.querySelector('.person-name')
+            const label = nameEl ? nameEl.textContent?.trim() || '' : el.textContent?.trim() || ''
+            const listEl = el.closest('.people-list')
+            const trackId = listEl ? listEl.dataset.trackId || null : null
+            const peers = listEl ? Array.from(listEl.querySelectorAll('.person')) : []
+            const index = peers.indexOf(el)
+            positions[personId] = {
+              left: rect.left,
+              top: rect.top,
+              width: rect.width,
+              height: rect.height,
+              label,
+              trackId,
+              index,
+            }
+          })
+          return positions
+        }
+
+        function spawnHistoryGhost(prev, options = {}) {
+          const overlay = ensureHistoryOverlay()
+          if (!overlay) return
+          const {
+            deltaX = 0,
+            deltaY = 0,
+            finalOpacity = 0,
+            label = prev.label || '',
+            duration = 600,
+          } = options
+          const ghost = document.createElement('div')
+          ghost.className = 'history-ghost'
+          ghost.textContent = label
+          ghost.style.position = 'absolute'
+          ghost.style.left = `${prev.left}px`
+          ghost.style.top = `${prev.top}px`
+          ghost.style.width = `${prev.width}px`
+          ghost.style.height = `${prev.height}px`
+          ghost.style.transform = 'translate(0, 0)'
+          ghost.style.opacity = '1'
+          overlay.appendChild(ghost)
+          requestAnimationFrame(() => {
+            ghost.style.transition = `transform ${duration}ms ease, opacity ${duration}ms ease`
+            ghost.style.transform = `translate(${deltaX}px, ${deltaY}px)`
+            ghost.style.opacity = `${finalOpacity}`
+          })
+          ghost.addEventListener(
+            'transitionend',
+            () => {
+              ghost.remove()
+            },
+            { once: true },
+          )
+          window.setTimeout(() => {
+            if (ghost.isConnected) {
+              ghost.remove()
+            }
+          }, duration + 120)
+        }
+
+        function highlightPersonArrival(el) {
+          el.classList.add('history-flash')
+          el.addEventListener(
+            'animationend',
+            () => {
+              el.classList.remove('history-flash')
+            },
+            { once: true },
+          )
+        }
+
+        function playPendingAnimation() {
+          if (!pendingAnimationPositions) {
+            pendingAnimatedPersonIds = null
+            return
+          }
+          const previous = pendingAnimationPositions
+          pendingAnimationPositions = null
+          const reduceMotion =
+            window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+          if (reduceMotion) {
+            pendingAnimatedPersonIds = null
+            return
+          }
+
+          const overlay = ensureHistoryOverlay()
+          if (overlay) {
+            overlay.innerHTML = ''
+          }
+
+          const handled = new Set()
+          const peopleEls = document.querySelectorAll('.person')
+          peopleEls.forEach((el) => {
+            const personId = el.dataset.personId
+            if (!personId) return
+            const rect = el.getBoundingClientRect()
+            const prev = previous[personId]
+            if (!prev) {
+              if (shouldAnimatePerson(personId)) {
+                highlightPersonArrival(el)
+              }
+              return
+            }
+            handled.add(personId)
+            const listEl = el.closest('.people-list')
+            const currentTrackId = listEl ? listEl.dataset.trackId || null : null
+            const peers = listEl ? Array.from(listEl.querySelectorAll('.person')) : []
+            const currentIndex = peers.indexOf(el)
+            const prevTrackId = Object.prototype.hasOwnProperty.call(prev, 'trackId') ? prev.trackId : null
+            const prevIndex = typeof prev.index === 'number' ? prev.index : -1
+            const trackChanged = prevTrackId !== currentTrackId
+            const indexChanged = prevIndex !== currentIndex
+            if (trackChanged || indexChanged) {
+              if (!shouldAnimatePerson(personId)) {
+                return
+              }
+              const deltaX = rect.left - prev.left
+              const deltaY = rect.top - prev.top
+              spawnHistoryGhost(prev, {
+                deltaX,
+                deltaY,
+                label: prev.label,
+              })
+              highlightPersonArrival(el)
+            }
+          })
+
+          Object.keys(previous).forEach((personId) => {
+            if (handled.has(personId)) return
+            const prev = previous[personId]
+            if (!prev) return
+            if (!shouldAnimatePerson(personId)) return
+            spawnHistoryGhost(prev, {
+              deltaX: 0,
+              deltaY: -24,
+              label: prev.label,
+            })
+          })
+          pendingAnimatedPersonIds = null
+        }
+
+        function flushHistoryAnnouncement() {
+          if (!historyAnnouncerEl || !pendingHistoryAnnouncement) return
+          historyAnnouncerEl.textContent = pendingHistoryAnnouncement
+          pendingHistoryAnnouncement = ''
+        }
+
+        function applyStateSnapshot(snapshot) {
+          state = snapshotPlannerState(snapshot)
+          selectedTrackIds = new Set()
+          pendingRetirePersonId = null
+        }
+
+
+        function clearObsoleteTrackSelections() {
+          const existingIds = new Set(
+            state.tracks.filter((t) => t.type === 'normal').map((t) => t.id),
+          )
+          selectedTrackIds = new Set(
+            [...selectedTrackIds].filter((id) => existingIds.has(id)),
+          )
+        }
+
+        function undoLastAction() {
+          if (!undoStack.length) return
+          const previousPositions = capturePersonPositions()
+          const entry = undoStack.pop()
+          const currentSnapshot = snapshotPlannerState()
+          redoStack.push({ description: entry.description, state: currentSnapshot })
+          if (redoStack.length > HISTORY_LIMIT) {
+            redoStack.shift()
+          }
+          applyStateSnapshot(entry.state)
+          pendingAnimationPositions = previousPositions
+          announceHistory(`Undid ${entry.description}`)
+          saveState()
+          render()
+        }
+
+        function redoLastAction() {
+          if (!redoStack.length) return
+          const previousPositions = capturePersonPositions()
+          const entry = redoStack.pop()
+          const currentSnapshot = snapshotPlannerState()
+          undoStack.push({ description: entry.description, state: currentSnapshot })
+          if (undoStack.length > HISTORY_LIMIT) {
+            undoStack.shift()
+          }
+          applyStateSnapshot(entry.state)
+          pendingAnimationPositions = previousPositions
+          announceHistory(`Redid ${entry.description}`)
+          saveState()
+          render()
+        }
+
+        function handleHistoryShortcut(ev) {
+          if (ev.defaultPrevented) return
+          const key = typeof ev.key === 'string' ? ev.key.toLowerCase() : ''
+          const isUndoShortcut = (ev.metaKey || ev.ctrlKey) && key === 'z' && !ev.altKey
+          const isRedoShortcut =
+            (ev.metaKey && key === 'z' && ev.shiftKey && !ev.altKey) ||
+            (ev.ctrlKey && !ev.metaKey && key === 'y' && !ev.altKey)
+
+          if (!isUndoShortcut && !isRedoShortcut) return
+
+          const target = ev.target
+          if (target) {
+            const tag = target.tagName
+            const isEditable =
+              target.isContentEditable ||
+              tag === 'INPUT' ||
+              tag === 'TEXTAREA'
+            if (isEditable) {
+              return
+            }
+          }
+
+          ev.preventDefault()
+          if (isUndoShortcut) {
+            undoLastAction()
+          } else if (isRedoShortcut) {
+            redoLastAction()
+          }
         }
 
         function getDefaultTrackCapacity() {
@@ -550,33 +947,36 @@
           const onDeck = getTrackByType('on_deck')
           if (!onDeck) return
 
-          for (const name of lines) {
-            const person = {
-              id: 'p-' + state.nextPersonId++,
-              name,
+          const description =
+            lines.length === 1 ? `Add ${lines[0]}` : `Add ${lines.length} people`
+
+          mutateState(description, () => {
+            for (const name of lines) {
+              const person = {
+                id: 'p-' + state.nextPersonId++,
+                name,
+              }
+              state.people.push(person)
+              onDeck.personIds.push(person.id)
             }
-            state.people.push(person)
-            onDeck.personIds.push(person.id)
-          }
+            return true
+          })
 
           textarea.value = ''
-          saveState()
-          render()
         }
 
         function resetPlan() {
-          if (!confirm('Reset plan? This will clear all tracks and people for this tool on this browser.')) {
-            return
-          }
-          window.localStorage.removeItem(STORAGE_KEY)
-          state = createInitialState()
-          selectedTrackIds.clear()
-          render()
+          mutateState('Reset plan', () => {
+            state = createInitialState()
+            selectedTrackIds = new Set()
+            return true
+          })
         }
 
         function quickAddCapacityTrack(extraSlots) {
           const defaultCapacity = getDefaultTrackCapacity()
           let remaining = Math.max(defaultCapacity, extraSlots || defaultCapacity)
+          const createdTrackIds = []
 
           while (remaining > 0) {
             const track = {
@@ -587,39 +987,45 @@
               personIds: [],
             }
             state.tracks.push(track)
+            createdTrackIds.push(track.id)
             remaining -= defaultCapacity
           }
 
-          saveState()
-          render()
+          return createdTrackIds
         }
 
-        function movePersonToTrack(personId, targetTrackId) {
+        function movePersonToTrackInternal(personId, targetTrackId) {
           const person = getPersonById(personId)
           const target = getTrackById(targetTrackId)
-          if (!person || !target) return
-
+          if (!person || !target) return false
           if (!trackHasCapacity(target)) {
-            return
+            return false
           }
 
-          let currentTrack = null
           for (const track of state.tracks) {
             const idx = track.personIds.indexOf(personId)
             if (idx !== -1) {
-              currentTrack = track
               track.personIds.splice(idx, 1)
               break
             }
           }
 
-          // Avoid duplicate if we somehow didn't find original track.
           if (!target.personIds.includes(personId)) {
             target.personIds.push(personId)
           }
 
-          saveState()
-          render()
+          return true
+        }
+
+        function movePersonToTrack(personId, targetTrackId, options = {}) {
+          const person = getPersonById(personId)
+          const target = getTrackById(targetTrackId)
+          if (!person || !target) return false
+          const description =
+            options.description || `Move ${person.name} to ${target.name}`
+          return mutateState(description, () =>
+            movePersonToTrackInternal(personId, targetTrackId),
+          )
         }
 
         function sweepTrackKeepOneInternal(track, onDeck) {
@@ -641,216 +1047,210 @@
         function sweepTrackKeepOne(trackId) {
           const track = getTrackById(trackId)
           const onDeck = getTrackByType('on_deck')
-          if (!track || !onDeck) return
-
-          if (!sweepTrackKeepOneInternal(track, onDeck)) return
-
-          saveState()
-          render()
+          if (!track || !onDeck) return false
+          const description = `Sweep ${track.name} (keep one)`
+          return mutateState(description, () => sweepTrackKeepOneInternal(track, onDeck))
         }
 
         function sweepAllTracksKeepOne() {
           const onDeck = getTrackByType('on_deck')
-          if (!onDeck) return
-
-          let changed = false
-          for (const track of state.tracks) {
-            if (track.type !== 'normal') continue
-            if (sweepTrackKeepOneInternal(track, onDeck)) {
-              changed = true
+          if (!onDeck) return false
+          return mutateState('Sweep all tracks (keep one)', () => {
+            let changed = false
+            for (const track of state.tracks) {
+              if (track.type !== 'normal') continue
+              if (sweepTrackKeepOneInternal(track, onDeck)) {
+                changed = true
+              }
             }
-          }
-
-          if (!changed) return
-
-          saveState()
-          render()
+            return changed
+          })
         }
 
         function sweepAndAllocateFromOnDeck() {
           const onDeck = getTrackByType('on_deck')
-          if (!onDeck || !onDeck.personIds.length) return
+          if (!onDeck || !onDeck.personIds.length) return false
 
-          let normalTracks = state.tracks.filter((t) => t.type === 'normal')
+          return mutateState('Allocate from On Deck', () => {
+            let normalTracks = state.tracks.filter((t) => t.type === 'normal')
+            let changed = false
 
-          // If there are no normal tracks yet, create enough new ones
-          // (using the default capacity) so everyone on deck can be placed.
-          if (!normalTracks.length) {
-            const onDeckCount = onDeck.personIds.length
-            if (onDeckCount > 0) {
-              quickAddCapacityTrack(onDeckCount)
+            if (!normalTracks.length) {
+              const createdIds = quickAddCapacityTrack(onDeck.personIds.length)
+              if (createdIds.length) {
+                changed = true
+              }
               normalTracks = state.tracks.filter((t) => t.type === 'normal')
             }
-          }
 
-          if (!normalTracks.length) return
+            if (!normalTracks.length) return false
 
-          // If there isn't enough capacity, automatically create extra tracks.
-          const onDeckCount = onDeck.personIds.length
-          let totalAvailableSlots = 0
-          let hasInfiniteCapacity = false
-          for (const track of normalTracks) {
-            if (track.capacity == null) {
-              hasInfiniteCapacity = true
-              break
+            const onDeckCount = onDeck.personIds.length
+            let totalAvailableSlots = 0
+            let hasInfiniteCapacity = false
+            for (const track of normalTracks) {
+              if (track.capacity == null) {
+                hasInfiniteCapacity = true
+                break
+              }
+              const available = Math.max(0, track.capacity - track.personIds.length)
+              totalAvailableSlots += available
             }
-            const available = Math.max(0, track.capacity - track.personIds.length)
-            totalAvailableSlots += available
-          }
 
-          if (!hasInfiniteCapacity && onDeckCount > 0 && totalAvailableSlots < onDeckCount) {
-            const shortage = onDeckCount - totalAvailableSlots
-            quickAddCapacityTrack(shortage)
-            // Recompute tracks to include the new ones.
-            normalTracks = state.tracks.filter((t) => t.type === 'normal')
-          }
-
-          // Create a shuffled copy of on deck people
-          const remaining = onDeck.personIds.slice()
-          for (let i = remaining.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1))
-            ;[remaining[i], remaining[j]] = [remaining[j], remaining[i]]
-          }
-
-          for (const track of normalTracks) {
-            if (!remaining.length) break
-            const capacity = track.capacity == null ? Infinity : track.capacity
-            let availableSlots = capacity - track.personIds.length
-            while (availableSlots > 0 && remaining.length) {
-              const id = remaining.pop()
-              if (!id) break
-              track.personIds.push(id)
-              availableSlots--
+            if (!hasInfiniteCapacity && onDeckCount > 0 && totalAvailableSlots < onDeckCount) {
+              const shortage = onDeckCount - totalAvailableSlots
+              const createdIds = quickAddCapacityTrack(shortage)
+              if (createdIds.length) {
+                changed = true
+              }
+              normalTracks = state.tracks.filter((t) => t.type === 'normal')
             }
-          }
 
-          onDeck.personIds = remaining
+            const remaining = onDeck.personIds.slice()
+            for (let i = remaining.length - 1; i > 0; i--) {
+              const j = Math.floor(Math.random() * (i + 1))
+              ;[remaining[i], remaining[j]] = [remaining[j], remaining[i]]
+            }
 
-          saveState()
-          render()
+            const originalOnDeckCount = onDeck.personIds.length
+            for (const track of normalTracks) {
+              if (!remaining.length) break
+              const capacity = track.capacity == null ? Infinity : track.capacity
+              let availableSlots = capacity - track.personIds.length
+              while (availableSlots > 0 && remaining.length) {
+                const id = remaining.pop()
+                if (!id) break
+                track.personIds.push(id)
+                availableSlots--
+                changed = true
+              }
+            }
+
+            if (remaining.length !== originalOnDeckCount) {
+              onDeck.personIds = remaining
+              changed = true
+            }
+
+            return changed
+          })
         }
 
         function deleteTrack(trackId) {
           const track = getTrackById(trackId)
-          if (!track || track.type !== 'normal') return
+          if (!track || track.type !== 'normal') return false
           const onDeck = getTrackByType('on_deck')
-          if (!onDeck) return
-
-          onDeck.personIds.push(...track.personIds)
-          state.tracks = state.tracks.filter((t) => t.id !== trackId)
-          selectedTrackIds.delete(trackId)
-          if (pendingDeleteTrackId === trackId) {
-            pendingDeleteTrackId = null
-          }
-
-          saveState()
-          render()
+          if (!onDeck) return false
+          const description = `Delete track ${track.name}`
+          return mutateState(description, () => {
+            onDeck.personIds.push(...track.personIds)
+            state.tracks = state.tracks.filter((t) => t.id !== trackId)
+            selectedTrackIds.delete(trackId)
+            return true
+          })
         }
 
         function deleteAllTracks() {
           const onDeck = getTrackByType('on_deck')
-          if (!onDeck) return
+          if (!onDeck) return false
 
           const normalTracks = state.tracks.filter((t) => t.type === 'normal')
-          if (!normalTracks.length) return
+          if (!normalTracks.length) return false
 
-          if (
-            !confirm(
-              `Delete all ${normalTracks.length} normal track${normalTracks.length === 1 ? '' : 's'}? All people on these tracks will be moved back to On Deck.`,
-            )
-          ) {
-            return
-          }
+          return mutateState(`Delete all ${normalTracks.length} track(s)`, () => {
+            for (const track of normalTracks) {
+              onDeck.personIds.push(...track.personIds)
+            }
 
-          for (const track of normalTracks) {
-            onDeck.personIds.push(...track.personIds)
-          }
+            state.tracks = state.tracks.filter((t) => t.type !== 'normal')
+            selectedTrackIds.clear()
+            return true
+          })
 
-          state.tracks = state.tracks.filter((t) => t.type !== 'normal')
-          selectedTrackIds.clear()
-          pendingDeleteTrackId = null
-
-          saveState()
-          render()
         }
 
         function deleteSelectedTracks() {
           const onDeck = getTrackByType('on_deck')
-          if (!onDeck) return
+          if (!onDeck) return false
 
           const tracksToDelete = state.tracks.filter(
             (t) => t.type === 'normal' && selectedTrackIds.has(t.id),
           )
-          if (!tracksToDelete.length) return
+          if (!tracksToDelete.length) return false
 
-          const names = tracksToDelete.map((t) => `"${t.name}"`).join(', ')
-          if (
-            !confirm(
-              `Delete ${tracksToDelete.length} track${tracksToDelete.length === 1 ? '' : 's'} (${names})? All people on these tracks will be moved back to On Deck.`,
+          const description =
+            tracksToDelete.length === 1
+              ? `Delete track ${tracksToDelete[0].name}`
+              : `Delete ${tracksToDelete.length} selected tracks`
+
+          return mutateState(description, () => {
+            for (const track of tracksToDelete) {
+              onDeck.personIds.push(...track.personIds)
+            }
+
+            state.tracks = state.tracks.filter(
+              (t) => !(t.type === 'normal' && selectedTrackIds.has(t.id)),
             )
-          ) {
-            return
-          }
+            selectedTrackIds.clear()
 
-          for (const track of tracksToDelete) {
-            onDeck.personIds.push(...track.personIds)
-          }
-
-          state.tracks = state.tracks.filter(
-            (t) => !(t.type === 'normal' && selectedTrackIds.has(t.id)),
-          )
-          selectedTrackIds.clear()
-
-          saveState()
-          render()
+            return true
+          })
         }
 
         function updateTrackCapacity(trackId, newCapacity) {
           const track = getTrackById(trackId)
-          if (!track || track.type !== 'normal') return
+          if (!track || track.type !== 'normal') return false
 
-          const originalCapacity = track.capacity
           const onDeck = getTrackByType('on_deck')
-          if (!onDeck) return
+          if (!onDeck) return false
 
-          if (newCapacity == null) {
-            track.capacity = null
-          } else if (newCapacity < 1) {
+          if (newCapacity != null && newCapacity < 1) {
             alert('Capacity must be at least 1.')
-            return
-          } else {
-            if (track.personIds.length > newCapacity) {
-              const overflowCount = track.personIds.length - newCapacity
-              if (
-                !confirm(
-                  `${overflowCount} people will be moved back to On Deck. Continue?`,
-                )
-              ) {
-                // Re-render to reset any partial input state.
-                render()
-                return
-              }
-              const overflow = track.personIds.splice(newCapacity)
-              onDeck.personIds.push(...overflow)
-            }
-            track.capacity = newCapacity
+            return false
           }
 
-          if (track.capacity !== originalCapacity) {
-            saveState()
-            render()
-          }
+          const description =
+            newCapacity == null
+              ? `Make ${track.name} capacity unlimited`
+              : `Set ${track.name} capacity to ${newCapacity}`
+
+          return mutateState(description, () => {
+            let changed = false
+
+            if (newCapacity == null) {
+              if (track.capacity !== null) {
+                track.capacity = null
+                changed = true
+              }
+              return changed
+            }
+
+            if (track.capacity !== newCapacity) {
+              track.capacity = newCapacity
+              changed = true
+            }
+
+            if (track.personIds.length > newCapacity) {
+              const overflow = track.personIds.splice(newCapacity)
+              if (overflow.length) {
+                onDeck.personIds.push(...overflow)
+                changed = true
+              }
+            }
+
+            return changed
+          })
         }
 
         function updateTrackName(trackId, newName) {
           const track = getTrackById(trackId)
-          if (!track || track.type !== 'normal') return
+          if (!track || track.type !== 'normal') return false
           const trimmed = newName.trim()
-          if (!trimmed) return
-          track.name = trimmed
-          saveState()
-          // No need to re-render for a simple inline update, but keep it consistent.
-          render()
+          if (!trimmed || trimmed === track.name) return false
+          const description = `Rename track to ${trimmed}`
+          return mutateState(description, () => {
+            track.name = trimmed
+            return true
+          })
         }
 
         function sweepPerson(personId) {
@@ -860,48 +1260,62 @@
         }
 
         function shufflePerson(personId) {
-          const currentTrack = state.tracks.find((t) => t.personIds.includes(personId))
-          if (!currentTrack) return
+          const person = getPersonById(personId)
+          if (!person) return false
+          return mutateState(`Shuffle ${person.name}`, () => {
+            const currentTrack = state.tracks.find((t) => t.personIds.includes(personId))
+            if (!currentTrack) return false
 
-          let candidates = state.tracks.filter((t) => {
-            if (t.id === currentTrack.id) return false
-            if (t.type === 'out_of_office') return false
-            if (t.type === 'on_deck') return false
-            return trackHasCapacity(t)
-          })
-
-          if (!candidates.length) {
-            // No existing track has capacity; create just enough slots
-            // for the person being shuffled, then try again.
-            quickAddCapacityTrack(1)
-            candidates = state.tracks.filter((t) => {
+            let candidates = state.tracks.filter((t) => {
               if (t.id === currentTrack.id) return false
               if (t.type === 'out_of_office') return false
               if (t.type === 'on_deck') return false
               return trackHasCapacity(t)
             })
-          }
 
-          if (!candidates.length) {
-            return
-          }
+            let changed = false
 
-          const idx = Math.floor(Math.random() * candidates.length)
-          const target = candidates[idx]
-          movePersonToTrack(personId, target.id)
+            if (!candidates.length) {
+              const created = quickAddCapacityTrack(1)
+              if (created.length) {
+                changed = true
+              }
+              candidates = state.tracks.filter((t) => {
+                if (t.id === currentTrack.id) return false
+                if (t.type === 'out_of_office') return false
+                if (t.type === 'on_deck') return false
+                return trackHasCapacity(t)
+              })
+            }
+
+            if (!candidates.length) {
+              return changed
+            }
+
+            const idx = Math.floor(Math.random() * candidates.length)
+            const target = candidates[idx]
+            if (movePersonToTrackInternal(personId, target.id)) {
+              changed = true
+            }
+            return changed
+          })
         }
 
         function retirePerson(personId) {
           const person = getPersonById(personId)
-          if (!person) return
-          state.people = state.people.filter((p) => p.id !== personId)
-          for (const track of state.tracks) {
-            track.personIds = track.personIds.filter((id) => id !== personId)
-          }
-
-          pendingRetirePersonId = null
-          saveState()
-          render()
+          if (!person) return false
+          return mutateState(`Retire ${person.name}`, () => {
+            const originalCount = state.people.length
+            state.people = state.people.filter((p) => p.id !== personId)
+            if (state.people.length === originalCount) {
+              return false
+            }
+            for (const track of state.tracks) {
+              track.personIds = track.personIds.filter((id) => id !== personId)
+            }
+            pendingRetirePersonId = null
+            return true
+          })
         }
 
         function onDragStartPerson(ev, personId) {
@@ -983,6 +1397,7 @@
         function render() {
           const container = document.getElementById('tracksContainer')
           if (!container) return
+          clearObsoleteTrackSelections()
           container.innerHTML = ''
 
           const defaultCapacityInput = document.getElementById('defaultCapacityInput')
@@ -1178,8 +1593,6 @@
             const actionsRow = document.createElement('div')
             actionsRow.className = 'track-actions'
 
-            const isPendingDelete = pendingDeleteTrackId === track.id
-
             if (track.type === 'on_deck') {
               const sweepAllocBtn = document.createElement('button')
               sweepAllocBtn.textContent = 'Allocate to tracks'
@@ -1201,40 +1614,18 @@
               actionsRow.appendChild(sweepBtn)
             }
 
-
             if (track.type === 'normal') {
-              if (isPendingDelete) {
-                const confirmBtn = document.createElement('button')
-                confirmBtn.textContent = 'Confirm delete'
-                confirmBtn.className = 'danger'
-                confirmBtn.addEventListener('click', () => {
-                  deleteTrack(track.id)
-                })
-                actionsRow.appendChild(confirmBtn)
-
-                const cancelBtn = document.createElement('button')
-                cancelBtn.textContent = 'Cancel'
-                cancelBtn.className = 'ghost'
-                cancelBtn.addEventListener('click', () => {
-                  pendingDeleteTrackId = null
-                  render()
-                })
-                actionsRow.appendChild(cancelBtn)
-              } else {
-                const deleteBtn = document.createElement('button')
-                deleteBtn.textContent = 'Delete track'
-                deleteBtn.className = 'danger'
-                deleteBtn.addEventListener('click', () => {
-                  pendingDeleteTrackId = track.id
-                  render()
-                })
-                actionsRow.appendChild(deleteBtn)
-              }
+              const deleteBtn = document.createElement('button')
+              deleteBtn.textContent = 'Delete track'
+              deleteBtn.className = 'danger'
+              deleteBtn.addEventListener('click', () => {
+                deleteTrack(track.id)
+              })
+              actionsRow.appendChild(deleteBtn)
             }
 
-
-
             header.appendChild(actionsRow)
+
             trackEl.appendChild(header)
 
             const peopleList = document.createElement('div')
@@ -1260,6 +1651,7 @@
                 if (!person) continue
                 const personEl = document.createElement('div')
                 personEl.className = 'person'
+                personEl.dataset.personId = person.id
                 personEl.draggable = true
                 personEl.addEventListener('dragstart', (ev) =>
                   onDragStartPerson(ev, person.id),
@@ -1405,10 +1797,36 @@
           }
 
           container.appendChild(dropZone)
+          updateHistoryControls()
+          playPendingAnimation()
+          flushHistoryAnnouncement()
         }
 
         function init() {
           state = loadState()
+
+          historyAnnouncerEl = document.getElementById('historyAnnouncer')
+
+          undoButtonEl = document.getElementById('undoButton')
+          if (undoButtonEl) {
+            undoButtonEl.addEventListener('click', (ev) => {
+              ev.preventDefault()
+              undoLastAction()
+            })
+          }
+
+          redoButtonEl = document.getElementById('redoButton')
+          if (redoButtonEl) {
+            redoButtonEl.addEventListener('click', (ev) => {
+              ev.preventDefault()
+              redoLastAction()
+            })
+          }
+
+          if (!historyShortcutBound) {
+            document.addEventListener('keydown', handleHistoryShortcut)
+            historyShortcutBound = true
+          }
 
           const addPeopleButton = document.getElementById('addPeopleButton')
           if (addPeopleButton) {
@@ -1449,9 +1867,14 @@
               if (!raw || Number.isNaN(value) || value < 1) {
                 value = 2
               }
-              state.defaultTrackCapacity = value
-              saveState()
-              render()
+              if (state.defaultTrackCapacity === value) {
+                defaultCapacityInput.value = String(value)
+                return
+              }
+              mutateState(`Set default track capacity to ${value}`, () => {
+                state.defaultTrackCapacity = value
+                return true
+              })
             })
           }
 

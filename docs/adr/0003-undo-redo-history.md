@@ -1,6 +1,6 @@
 # ADR: Global Undo/Redo Instead of Confirmation Modals
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2025-12-20
 - Owners: Docs app maintainers
 - Related:
@@ -31,11 +31,12 @@ Replace confirmation dialogs for destructive actions with a global undo/redo sys
   - History state persists only for the current page load; refreshing the page clears both stacks and disables the controls.
 - **UI affordances**
   - Add Undo/Redo buttons to the planner chrome with accompanying keyboard shortcuts (e.g., `Cmd/Ctrl + Z` and `Shift + Cmd/Ctrl + Z`).
+  - Keep both buttons rendered at all times; when disabled the controls remain in place (with reduced emphasis) so layout stays stable while history depth changes.
   - Disable the buttons when their respective stack is empty, and display contextual tooltips that describe what will be undone/redone (e.g., "Undo delete track").
   - Remove confirmation prompts from destructive actions, replacing instructional copy with guidance that Undo is available.
 - **Accessibility & messaging**
   - Announce undo/redo results via polite live region updates so screen-reader users receive confirmation without modal dialogs.
-  - Surface a brief banner or toast the first time Undo becomes available in a session to educate users about the new control.
+  - Animate state reversals using lightweight FLIP transforms and highlight flashes so sighted users can track where people move during undo/redo, respecting reduced-motion preferences.
 
 ## Alternatives Considered
 
@@ -62,7 +63,5 @@ Replace confirmation dialogs for destructive actions with a global undo/redo sys
 
 ## Follow-Ups
 
-- Implement the history manager, integrating it with all existing mutation points.
-- Replace destructive confirmation dialogs with inline messaging referencing Undo.
 - Add instrumentation (if available) to measure undo usage and identify gaps.
 - Update documentation and onboarding to describe the new Undo/Redo controls and their session-scoped behavior.
