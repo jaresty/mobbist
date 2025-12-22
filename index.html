@@ -52,14 +52,43 @@
 
       .controls {
         display: flex;
+        flex-direction: column;
+        gap: 8px;
+        align-items: stretch;
+        margin-left: auto;
+      }
+
+
+      .controls-row {
+        display: flex;
         flex-wrap: wrap;
         gap: 8px;
+        justify-content: flex-end;
         align-items: center;
       }
 
+      .history-controls {
+        border-top: 1px solid var(--border);
+        padding-top: 6px;
+      }
+
       .controls .history-btn {
-        min-width: 160px;
+        min-width: 180px;
         text-align: left;
+      }
+
+      @media (min-width: 768px) {
+        .controls {
+          align-items: flex-end;
+        }
+
+        .controls-row {
+          flex-wrap: nowrap;
+        }
+
+        .history-controls {
+          width: 100%;
+        }
       }
 
       textarea {
@@ -209,6 +238,47 @@
         min-height: 120px;
       }
 
+      .track-locked {
+        border-color: #c7d2fe;
+        background: #f8fafc;
+        box-shadow: inset 0 0 0 1px rgba(59, 130, 246, 0.15);
+      }
+
+      .track-locked .people-list,
+      .track-locked .roles-list {
+        background: #eef2ff;
+        box-shadow: inset 0 0 0 1px rgba(59, 130, 246, 0.12);
+      }
+
+      .track-lock-toggle {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 2px 8px;
+        font-size: 0.75rem;
+        line-height: 1.2;
+        border-radius: 999px;
+        border: 1px solid var(--border);
+        background: #ffffff;
+        transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
+      }
+
+      .track-lock-toggle[data-locked='true'] {
+        background: var(--accent-soft);
+        border-color: var(--accent);
+        color: var(--accent);
+      }
+
+      .track-lock-toggle[data-locked='true']:hover {
+        background: var(--accent);
+        color: #ffffff;
+      }
+
+      .track-lock-toggle:not([data-locked='true']):hover {
+        background: rgba(0, 112, 243, 0.08);
+        border-color: var(--accent);
+      }
+
       .track-header {
         display: flex;
         flex-direction: column;
@@ -283,6 +353,32 @@
       .people-list.drop-target {
         outline: 2px dashed var(--accent);
         background: var(--accent-soft);
+      }
+
+      .people-list.drop-target-locked,
+      .roles-list.drop-target-locked {
+        outline-style: dashed;
+        outline-color: #f97316;
+        background: rgba(249, 115, 22, 0.16);
+      }
+
+      .people-list.drop-target-full,
+      .roles-list.drop-target-full {
+        outline-style: dashed;
+        outline-color: #fbbf24;
+        background: rgba(251, 191, 36, 0.18);
+      }
+
+      .track-drop-target {
+        box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.35);
+      }
+
+      .track-drop-target-locked {
+        box-shadow: 0 0 0 2px rgba(249, 115, 22, 0.5);
+      }
+
+      .track-drop-target-full {
+        box-shadow: 0 0 0 2px rgba(251, 191, 36, 0.45);
       }
 
       .roles-list {
@@ -473,6 +569,19 @@
         font-size: 0.7rem;
       }
 
+      .badge-locked {
+        display: inline-flex;
+        align-items: center;
+        padding: 2px 8px;
+        border-radius: 999px;
+        background: rgba(59, 130, 246, 0.15);
+        color: #1d4ed8;
+        font-size: 0.65rem;
+        font-weight: 600;
+        letter-spacing: 0.03em;
+        text-transform: uppercase;
+      }
+
       .badge-dot {
         width: 6px;
         height: 6px;
@@ -504,11 +613,15 @@
           <p>Plan pairs and mobs and reshuffle people quickly in your browser.</p>
         </div>
         <div class="controls">
-          <button id="addRoleButton" class="primary">Add role</button>
-          <button id="shuffleRolesButton" class="ghost" disabled>Shuffle roles</button>
-          <button id="undoButton" class="ghost history-btn" disabled>Undo</button>
-          <button id="redoButton" class="ghost history-btn" disabled>Redo</button>
-          <button id="resetPlanButton" class="ghost">Reset plan</button>
+          <div class="controls-row primary-controls">
+            <button id="addRoleButton" class="primary">Add role</button>
+            <button id="shuffleRolesButton" class="ghost" disabled>Shuffle roles</button>
+            <button id="resetPlanButton" class="ghost">Reset plan</button>
+          </div>
+          <div class="controls-row history-controls">
+            <button id="undoButton" class="ghost history-btn" disabled>Undo</button>
+            <button id="redoButton" class="ghost history-btn" disabled>Redo</button>
+          </div>
         </div>
       </div>
 
@@ -554,7 +667,7 @@
         /**
          * @typedef {{ id: string, name: string }} Person
          * @typedef {{ id: string, name: string, color: string | null }} Role
-         * @typedef {{ id: string, name: string, type: 'normal' | 'on_deck' | 'out_of_office', capacity: number | null, personIds: string[], roleIds: string[] }} Track
+         * @typedef {{ id: string, name: string, type: 'normal' | 'on_deck' | 'out_of_office', capacity: number | null, personIds: string[], roleIds: string[], locked?: boolean }} Track
          * @typedef {{ people: Person[], roles: Role[], tracks: Track[], nextPersonId: number, nextTrackId: number, nextRoleId: number, defaultTrackCapacity: number }} PlannerState
          */
 
@@ -591,6 +704,7 @@
                 capacity: null,
                 personIds: [],
                 roleIds: [],
+                locked: false,
               },
               {
                 id: 'out_of_office',
@@ -599,6 +713,7 @@
                 capacity: null,
                 personIds: [],
                 roleIds: [],
+                locked: false,
               },
               {
                 id: 'track-1',
@@ -607,6 +722,7 @@
                 capacity: 2,
                 personIds: [],
                 roleIds: [],
+                locked: false,
               },
             ],
             nextPersonId: 1,
@@ -672,6 +788,7 @@
                   ...track,
                   personIds,
                   roleIds: [],
+                  locked: Boolean(track.locked),
                 }
               }
               roleIds.forEach((id) => assignedRoleIds.add(id))
@@ -688,6 +805,7 @@
                       : defaultCapacity,
                 personIds,
                 roleIds,
+                locked: Boolean(track.locked),
               }
             })
 
@@ -700,6 +818,7 @@
                 capacity: 2,
                 personIds: [],
                 roleIds: [],
+                locked: false,
               })
             }
 
@@ -752,8 +871,30 @@
           return state.tracks.find((t) => t.id === id) || null
         }
 
+        function isTrackLocked(track) {
+          return Boolean(track && track.type === 'normal' && track.locked)
+        }
+
+        function shouldAllowLockedTrackEdit(track, message) {
+          if (!track || track.type !== 'normal') return false
+          if (!isTrackLocked(track)) return true
+          const promptMessage =
+            typeof message === 'string' && message.trim().length
+              ? message
+              : `"${track.name}" is locked. Continue?`
+          return window.confirm(promptMessage)
+        }
+
         function getPersonById(id) {
           return state.people.find((p) => p.id === id) || null
+        }
+
+        function findPersonTrack(personId) {
+          return (
+            state.tracks.find(
+              (track) => Array.isArray(track.personIds) && track.personIds.includes(personId),
+            ) || null
+          )
         }
 
         function getRoleById(id) {
@@ -821,6 +962,7 @@
                   : state.defaultTrackCapacity,
             personIds: Array.isArray(personIds) ? [...personIds] : [],
             roleIds: Array.isArray(roleIds) ? [...roleIds] : [],
+            locked: false,
           }
           state.tracks.push(track)
           return track
@@ -843,11 +985,19 @@
         function createTrackFromPersonDrop(personId) {
           const person = getPersonById(personId)
           if (!person) return false
+          const sourceTrack = findPersonTrack(personId)
+          if (sourceTrack && isTrackLocked(sourceTrack)) {
+            const allowed = shouldAllowLockedTrackEdit(
+              sourceTrack,
+              `"${sourceTrack.name}" is locked. Remove ${person.name} to new track?`,
+            )
+            if (!allowed) return false
+          }
           const description = `Create track for ${person.name}`
           return mutateState(description, () => {
-            const sourceTrack = state.tracks.find((t) => t.personIds.includes(personId))
-            if (sourceTrack) {
-              sourceTrack.personIds = sourceTrack.personIds.filter((id) => id !== personId)
+            const sourceTrackInside = state.tracks.find((t) => t.personIds.includes(personId))
+            if (sourceTrackInside) {
+              sourceTrackInside.personIds = sourceTrackInside.personIds.filter((id) => id !== personId)
             }
 
             const newTrack = createNormalTrack({ capacity: null, personIds: [personId] })
@@ -1226,6 +1376,7 @@
               capacity: defaultCapacity,
               personIds: [],
               roleIds: [],
+              locked: false,
             }
             state.tracks.push(track)
             createdTrackIds.push(track.id)
@@ -1239,7 +1390,7 @@
           const person = getPersonById(personId)
           const target = getTrackById(targetTrackId)
           if (!person || !target) return false
-          if (!trackHasCapacity(target)) {
+          if (!trackHasCapacity(target) && !target.personIds.includes(personId)) {
             return false
           }
 
@@ -1262,6 +1413,47 @@
           const person = getPersonById(personId)
           const target = getTrackById(targetTrackId)
           if (!person || !target) return false
+          const ignoreLocks = Boolean(options.ignoreLocks)
+          const sourceTrack = findPersonTrack(personId)
+
+          if (!ignoreLocks) {
+            const confirmations = []
+
+            if (sourceTrack && sourceTrack.id !== target.id && isTrackLocked(sourceTrack)) {
+              confirmations.push(
+                `"${sourceTrack.name}" is locked. Remove ${person.name}?`,
+              )
+            }
+
+            if (target && (!sourceTrack || sourceTrack.id !== target.id) && isTrackLocked(target)) {
+              confirmations.push(`"${target.name}" is locked. Add ${person.name}?`)
+            }
+
+            let nextCapacity = null
+            const willChangeCapacity =
+              target.type === 'normal' &&
+              target.capacity != null &&
+              (!sourceTrack || sourceTrack.id !== target.id) &&
+              target.personIds.length >= target.capacity
+            if (willChangeCapacity) {
+              nextCapacity = target.personIds.length + 1
+              confirmations.push(
+                `"${target.name}" is full. Increase capacity to ${nextCapacity}?`,
+              )
+            }
+
+            if (confirmations.length) {
+              const message = confirmations.join('\n')
+              const allowed = window.confirm(message)
+              if (!allowed) return false
+            }
+
+            if (willChangeCapacity && nextCapacity != null) {
+              const updated = updateTrackCapacity(target.id, nextCapacity)
+              if (!updated) return false
+            }
+          }
+
           const description =
             options.description || `Move ${person.name} to ${target.name}`
           return mutateState(description, () =>
@@ -1301,6 +1493,29 @@
           const role = getRoleById(roleId)
           const target = getTrackById(targetTrackId)
           if (!role || !target || target.type !== 'normal') return false
+          const ignoreLocks = Boolean(options.ignoreLocks)
+          const sourceTrack = findRoleTrack(roleId)
+
+          if (!ignoreLocks) {
+            const confirmations = []
+
+            if (sourceTrack && sourceTrack.id !== target.id && isTrackLocked(sourceTrack)) {
+              confirmations.push(
+                `"${sourceTrack.name}" is locked. Remove role ${role.name}?`,
+              )
+            }
+
+            if (target && (!sourceTrack || sourceTrack.id !== target.id) && isTrackLocked(target)) {
+              confirmations.push(`"${target.name}" is locked. Add role ${role.name}?`)
+            }
+
+            if (confirmations.length) {
+              const message = confirmations.join('\n')
+              const allowed = window.confirm(message)
+              if (!allowed) return false
+            }
+          }
+
           const description =
             options.description || `Move role ${role.name} to ${target.name}`
           return mutateState(description, () =>
@@ -1332,6 +1547,20 @@
         function deleteRole(roleId) {
           const role = getRoleById(roleId)
           if (!role) return false
+          const lockedTrack = state.tracks.find(
+            (track) =>
+              track.type === 'normal' &&
+              isTrackLocked(track) &&
+              Array.isArray(track.roleIds) &&
+              track.roleIds.includes(roleId),
+          )
+          if (lockedTrack) {
+            const allowed = shouldAllowLockedTrackEdit(
+              lockedTrack,
+              `"${lockedTrack.name}" is locked. Remove role ${role.name}?`,
+            )
+            if (!allowed) return false
+          }
           return mutateState(`Delete role ${role.name}`, () => {
             state.roles = state.roles.filter((r) => r.id !== roleId)
             for (const track of state.tracks) {
@@ -1348,9 +1577,12 @@
           if (!role) return false
           return mutateState(`Shuffle role ${role.name}`, () => {
             const currentTrack = findRoleTrack(roleId)
-            const candidates = getNormalTracks().filter((track) =>
-              currentTrack ? track.id !== currentTrack.id : true,
-            )
+            if (currentTrack && isTrackLocked(currentTrack)) return false
+            const candidates = getNormalTracks().filter((track) => {
+              if (currentTrack && track.id === currentTrack.id) return false
+              if (isTrackLocked(track)) return false
+              return true
+            })
             if (!candidates.length) return false
             const target = candidates[Math.floor(Math.random() * candidates.length)]
             return moveRoleToTrackInternal(roleId, target.id)
@@ -1362,24 +1594,41 @@
           return mutateState('Shuffle all roles', () => {
             const normalTracks = getNormalTracks()
             if (!normalTracks.length) return false
-            const roleIds = state.roles.map((role) => role.id)
-            if (roleIds.length <= 1 && normalTracks.length <= 1) {
+
+            const lockedTracks = normalTracks.filter((track) => isTrackLocked(track))
+            const unlockedTracks = normalTracks.filter((track) => !isTrackLocked(track))
+            if (!unlockedTracks.length) return false
+
+            const lockedRoleIds = new Set()
+            lockedTracks.forEach((track) => {
+              track.roleIds.forEach((roleId) => lockedRoleIds.add(roleId))
+            })
+
+            const pool = state.roles
+              .map((role) => role.id)
+              .filter((roleId) => !lockedRoleIds.has(roleId))
+
+            if (pool.length <= 1 && unlockedTracks.length <= 1) {
               return false
             }
-            const previousAssignments = normalTracks.map((track) => [...track.roleIds])
-            const shuffled = [...roleIds]
+
+            const previousAssignments = unlockedTracks.map((track) => [...track.roleIds])
+            const shuffled = [...pool]
             for (let i = shuffled.length - 1; i > 0; i--) {
               const j = Math.floor(Math.random() * (i + 1))
               ;[shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]
             }
-            normalTracks.forEach((track) => {
+
+            unlockedTracks.forEach((track) => {
               track.roleIds = []
             })
+
             shuffled.forEach((roleId, index) => {
-              const target = normalTracks[index % normalTracks.length]
+              const target = unlockedTracks[index % unlockedTracks.length]
               target.roleIds.push(roleId)
             })
-            const changed = normalTracks.some((track, index) => {
+
+            const changed = unlockedTracks.some((track, index) => {
               const previous = previousAssignments[index] || []
               if (previous.length !== track.roleIds.length) return true
               return previous.some((id, idx) => id !== track.roleIds[idx])
@@ -1388,10 +1637,11 @@
           })
         }
 
-        function sweepTrackKeepOneInternal(track, onDeck) {
+        function sweepTrackKeepOneInternal(track, onDeck, ignoreLock = false) {
           if (!track) return false
           if (!onDeck) return false
           if (track.type === 'on_deck') return false
+          if (isTrackLocked(track) && !ignoreLock) return false
           if (track.personIds.length <= 1) return false
 
           const idxToKeep = Math.floor(Math.random() * track.personIds.length)
@@ -1408,6 +1658,15 @@
           const track = getTrackById(trackId)
           const onDeck = getTrackByType('on_deck')
           if (!track || !onDeck) return false
+          if (isTrackLocked(track)) {
+            const allowed = shouldAllowLockedTrackEdit(
+              track,
+              `"${track.name}" is locked. Sweep everyone but one?`,
+            )
+            if (!allowed) return false
+            const description = `Sweep ${track.name} (keep one)`
+            return mutateState(description, () => sweepTrackKeepOneInternal(track, onDeck, true))
+          }
           const description = `Sweep ${track.name} (keep one)`
           return mutateState(description, () => sweepTrackKeepOneInternal(track, onDeck))
         }
@@ -1419,6 +1678,7 @@
             let changed = false
             for (const track of state.tracks) {
               if (track.type !== 'normal') continue
+              if (isTrackLocked(track)) continue
               if (sweepTrackKeepOneInternal(track, onDeck)) {
                 changed = true
               }
@@ -1439,16 +1699,27 @@
               const createdIds = quickAddCapacityTrack(onDeck.personIds.length)
               if (createdIds.length) {
                 changed = true
+                normalTracks = state.tracks.filter((t) => t.type === 'normal')
               }
-              normalTracks = state.tracks.filter((t) => t.type === 'normal')
             }
 
-            if (!normalTracks.length) return false
+            let unlockedTracks = normalTracks.filter((track) => !isTrackLocked(track))
+
+            if (!unlockedTracks.length) {
+              const createdIds = quickAddCapacityTrack(onDeck.personIds.length)
+              if (createdIds.length) {
+                changed = true
+                normalTracks = state.tracks.filter((t) => t.type === 'normal')
+                unlockedTracks = normalTracks.filter((track) => !isTrackLocked(track))
+              }
+            }
+
+            if (!unlockedTracks.length) return changed
 
             const onDeckCount = onDeck.personIds.length
             let totalAvailableSlots = 0
             let hasInfiniteCapacity = false
-            for (const track of normalTracks) {
+            for (const track of unlockedTracks) {
               if (track.capacity == null) {
                 hasInfiniteCapacity = true
                 break
@@ -1462,9 +1733,12 @@
               const createdIds = quickAddCapacityTrack(shortage)
               if (createdIds.length) {
                 changed = true
+                normalTracks = state.tracks.filter((t) => t.type === 'normal')
+                unlockedTracks = normalTracks.filter((track) => !isTrackLocked(track))
               }
-              normalTracks = state.tracks.filter((t) => t.type === 'normal')
             }
+
+            if (!unlockedTracks.length) return changed
 
             const remaining = onDeck.personIds.slice()
             for (let i = remaining.length - 1; i > 0; i--) {
@@ -1473,7 +1747,7 @@
             }
 
             const originalOnDeckCount = onDeck.personIds.length
-            for (const track of normalTracks) {
+            for (const track of unlockedTracks) {
               if (!remaining.length) break
               const capacity = track.capacity == null ? Infinity : track.capacity
               let availableSlots = capacity - track.personIds.length
@@ -1498,6 +1772,13 @@
         function deleteTrack(trackId) {
           const track = getTrackById(trackId)
           if (!track || track.type !== 'normal') return false
+          if (isTrackLocked(track)) {
+            const allowed = shouldAllowLockedTrackEdit(
+              track,
+              `"${track.name}" is locked. Delete this track?`,
+            )
+            if (!allowed) return false
+          }
           const onDeck = getTrackByType('on_deck')
           if (!onDeck) return false
           const description = `Delete track ${track.name}`
@@ -1528,17 +1809,33 @@
           const normalTracks = state.tracks.filter((t) => t.type === 'normal')
           if (!normalTracks.length) return false
 
-          return mutateState(`Delete all ${normalTracks.length} track(s)`, () => {
+          const deletableTracks = normalTracks.filter((track) => !isTrackLocked(track))
+          if (!deletableTracks.length) return false
+
+          const description =
+            deletableTracks.length === normalTracks.length
+              ? `Delete all ${deletableTracks.length} track(s)`
+              : `Delete ${deletableTracks.length} unlocked track(s)`
+
+          return mutateState(description, () => {
             const rolesToReassign = []
-            for (const track of normalTracks) {
+            for (const track of deletableTracks) {
               onDeck.personIds.push(...track.personIds)
               if (Array.isArray(track.roleIds) && track.roleIds.length) {
                 rolesToReassign.push(...track.roleIds)
               }
             }
 
-            state.tracks = state.tracks.filter((t) => t.type !== 'normal')
-            selectedTrackIds.clear()
+            const deletableIds = new Set(deletableTracks.map((track) => track.id))
+            state.tracks = state.tracks.filter(
+              (t) => !(t.type === 'normal' && deletableIds.has(t.id)),
+            )
+
+            for (const id of Array.from(selectedTrackIds)) {
+              if (deletableIds.has(id)) {
+                selectedTrackIds.delete(id)
+              }
+            }
 
             if (rolesToReassign.length) {
               createNormalTrack({ roleIds: Array.from(new Set(rolesToReassign)) })
@@ -1546,7 +1843,6 @@
 
             return true
           })
-
         }
 
         function deleteSelectedTracks() {
@@ -1557,6 +1853,15 @@
             (t) => t.type === 'normal' && selectedTrackIds.has(t.id),
           )
           if (!tracksToDelete.length) return false
+
+          const lockedTracks = tracksToDelete.filter((track) => isTrackLocked(track))
+          for (const track of lockedTracks) {
+            const allowed = shouldAllowLockedTrackEdit(
+              track,
+              `"${track.name}" is locked. Delete this track?`,
+            )
+            if (!allowed) return false
+          }
 
           const description =
             tracksToDelete.length === 1
@@ -1600,6 +1905,16 @@
         function updateTrackCapacity(trackId, newCapacity) {
           const track = getTrackById(trackId)
           if (!track || track.type !== 'normal') return false
+
+          if (isTrackLocked(track)) {
+            const allowed = shouldAllowLockedTrackEdit(
+              track,
+              newCapacity == null
+                ? `"${track.name}" is locked. Make capacity unlimited?`
+                : `"${track.name}" is locked. Set capacity to ${newCapacity}?`,
+            )
+            if (!allowed) return false
+          }
 
           const onDeck = getTrackByType('on_deck')
           if (!onDeck) return false
@@ -1654,6 +1969,17 @@
           })
         }
 
+        function setTrackLocked(trackId, locked) {
+          const track = getTrackById(trackId)
+          if (!track || track.type !== 'normal') return false
+          if (Boolean(track.locked) === Boolean(locked)) return false
+          const description = locked ? `Lock ${track.name}` : `Unlock ${track.name}`
+          return mutateState(description, () => {
+            track.locked = Boolean(locked)
+            return true
+          })
+        }
+
         function sweepPerson(personId) {
           const onDeck = getTrackByType('on_deck')
           if (!onDeck) return
@@ -1666,11 +1992,13 @@
           return mutateState(`Shuffle ${person.name}`, () => {
             const currentTrack = state.tracks.find((t) => t.personIds.includes(personId))
             if (!currentTrack) return false
+            if (isTrackLocked(currentTrack)) return false
 
             let candidates = state.tracks.filter((t) => {
               if (t.id === currentTrack.id) return false
               if (t.type === 'out_of_office') return false
               if (t.type === 'on_deck') return false
+              if (isTrackLocked(t)) return false
               return trackHasCapacity(t)
             })
 
@@ -1685,6 +2013,7 @@
                 if (t.id === currentTrack.id) return false
                 if (t.type === 'out_of_office') return false
                 if (t.type === 'on_deck') return false
+                if (isTrackLocked(t)) return false
                 return trackHasCapacity(t)
               })
             }
@@ -1705,6 +2034,14 @@
         function retirePerson(personId) {
           const person = getPersonById(personId)
           if (!person) return false
+          const sourceTrack = findPersonTrack(personId)
+          if (sourceTrack && isTrackLocked(sourceTrack)) {
+            const allowed = shouldAllowLockedTrackEdit(
+              sourceTrack,
+              `"${sourceTrack.name}" is locked. Retire ${person.name}?`,
+            )
+            if (!allowed) return false
+          }
           return mutateState(`Retire ${person.name}`, () => {
             const originalCount = state.people.length
             state.people = state.people.filter((p) => p.id !== personId)
@@ -1729,34 +2066,121 @@
           currentDragPersonId = null
           const lists = document.querySelectorAll('.people-list')
           lists.forEach((el) => {
-            el.classList.remove('drop-target')
+            clearListDropTarget(el)
           })
           setDropZoneActive(false)
+        }
+
+        function decorateListDropTarget(el, track, options = {}, dataTransfer) {
+          if (!el) return
+          const { isLockedTarget = false, isFullTarget = false } = options
+          el.classList.add('drop-target')
+
+          if (isLockedTarget) {
+            el.classList.add('drop-target-locked')
+          } else {
+            el.classList.remove('drop-target-locked')
+          }
+
+          if (isFullTarget) {
+            el.classList.add('drop-target-full')
+          } else {
+            el.classList.remove('drop-target-full')
+          }
+
+          const trackContainer = el.closest('.track')
+          if (trackContainer) {
+            trackContainer.classList.add('track-drop-target')
+            if (isLockedTarget) {
+              trackContainer.classList.add('track-drop-target-locked')
+            } else {
+              trackContainer.classList.remove('track-drop-target-locked')
+            }
+            if (isFullTarget) {
+              trackContainer.classList.add('track-drop-target-full')
+            } else {
+              trackContainer.classList.remove('track-drop-target-full')
+            }
+          }
+
+          if (dataTransfer) {
+            dataTransfer.dropEffect = 'move'
+          }
+        }
+
+        function clearListDropTarget(el) {
+          if (!el) return
+          el.classList.remove('drop-target')
+          el.classList.remove('drop-target-locked')
+          el.classList.remove('drop-target-full')
+          const trackContainer = el.closest('.track')
+          if (trackContainer) {
+            trackContainer.classList.remove('track-drop-target')
+            trackContainer.classList.remove('track-drop-target-locked')
+            trackContainer.classList.remove('track-drop-target-full')
+          }
+        }
+
+        function onDragEnterList(ev, trackId) {
+          if (!currentDragPersonId) return
+          const track = getTrackById(trackId)
+          if (!track) return
+
+          ev.preventDefault()
+
+          const sourceTrack = findPersonTrack(currentDragPersonId)
+          const isSameTrack = Boolean(sourceTrack && sourceTrack.id === track.id)
+          const isLockedTarget = !isSameTrack && isTrackLocked(track)
+          const hasCapacity = trackHasCapacity(track)
+          const isFullTarget =
+            !isSameTrack && track.type === 'normal' && track.capacity != null && !hasCapacity
+
+          decorateListDropTarget(
+            ev.currentTarget,
+            track,
+            { isLockedTarget, isFullTarget },
+            ev.dataTransfer,
+          )
         }
 
         function onDragOverList(ev, trackId) {
           if (!currentDragPersonId) return
           const track = getTrackById(trackId)
-          if (!track || !trackHasCapacity(track)) return
+          if (!track) return
+
           ev.preventDefault()
-          ev.dataTransfer.dropEffect = 'move'
-          const el = ev.currentTarget
-          el.classList.add('drop-target')
+
+          const sourceTrack = findPersonTrack(currentDragPersonId)
+          const isSameTrack = Boolean(sourceTrack && sourceTrack.id === track.id)
+          const isLockedTarget = !isSameTrack && isTrackLocked(track)
+          const hasCapacity = trackHasCapacity(track)
+          const isFullTarget =
+            !isSameTrack && track.type === 'normal' && track.capacity != null && !hasCapacity
+
+          decorateListDropTarget(
+            ev.currentTarget,
+            track,
+            { isLockedTarget, isFullTarget },
+            ev.dataTransfer,
+          )
         }
 
         function onDragLeaveList(ev) {
           const el = ev.currentTarget
-          el.classList.remove('drop-target')
+          clearListDropTarget(el)
         }
 
         function onDropOnList(ev, trackId) {
           ev.preventDefault()
           const el = ev.currentTarget
-          el.classList.remove('drop-target')
-          if (!currentDragPersonId) return
-          movePersonToTrack(currentDragPersonId, trackId)
+          clearListDropTarget(el)
+
+          const personId = currentDragPersonId
           currentDragPersonId = null
           setDropZoneActive(false)
+          if (!personId) return
+
+          movePersonToTrack(personId, trackId)
         }
 
         function onDragEnterDropZone(ev) {
@@ -1806,31 +2230,53 @@
           currentDragRoleId = null
           const lists = document.querySelectorAll('.roles-list')
           lists.forEach((el) => {
-            el.classList.remove('drop-target')
+            clearListDropTarget(el)
           })
+        }
+
+        function onDragEnterRolesList(ev, trackId) {
+          if (!currentDragRoleId) return
+          const track = getTrackById(trackId)
+          if (!track || track.type !== 'normal') return
+
+          ev.preventDefault()
+
+          const isLockedTarget = isTrackLocked(track)
+
+          decorateListDropTarget(
+            ev.currentTarget,
+            track,
+            { isLockedTarget, isFullTarget: false },
+            ev.dataTransfer,
+          )
         }
 
         function onDragOverRolesList(ev, trackId) {
           if (!currentDragRoleId) return
           const track = getTrackById(trackId)
           if (!track || track.type !== 'normal') return
+
           ev.preventDefault()
-          if (ev.dataTransfer) {
-            ev.dataTransfer.dropEffect = 'move'
-          }
-          const el = ev.currentTarget
-          el.classList.add('drop-target')
+
+          const isLockedTarget = isTrackLocked(track)
+
+          decorateListDropTarget(
+            ev.currentTarget,
+            track,
+            { isLockedTarget, isFullTarget: false },
+            ev.dataTransfer,
+          )
         }
 
         function onDragLeaveRolesList(ev) {
           const el = ev.currentTarget
-          el.classList.remove('drop-target')
+          clearListDropTarget(el)
         }
 
         function onDropOnRolesList(ev, trackId) {
           ev.preventDefault()
           const el = ev.currentTarget
-          el.classList.remove('drop-target')
+          clearListDropTarget(el)
           if (!currentDragRoleId) return
           moveRoleToTrack(currentDragRoleId, trackId)
           currentDragRoleId = null
@@ -1917,7 +2363,11 @@
           for (const track of state.tracks) {
             const trackEl = document.createElement('section')
             trackEl.className = 'track'
+            if (track.locked) {
+              trackEl.classList.add('track-locked')
+            }
             trackEl.dataset.trackId = track.id
+            trackEl.dataset.locked = track.locked ? 'true' : 'false'
 
             const header = document.createElement('div')
             header.className = 'track-header'
@@ -1945,9 +2395,26 @@
             const titleSpan = document.createElement('span')
             titleSpan.className = 'track-title'
             titleSpan.textContent = track.name
-
+            titleSpan.style.flex = '1'
 
             headerRow.appendChild(titleSpan)
+
+            if (track.type === 'normal') {
+              const lockButton = document.createElement('button')
+              lockButton.type = 'button'
+              lockButton.className = 'track-lock-toggle'
+              lockButton.dataset.locked = track.locked ? 'true' : 'false'
+              lockButton.setAttribute('aria-pressed', track.locked ? 'true' : 'false')
+              lockButton.textContent = track.locked ? '🔓 Unlock' : '🔒 Lock'
+              lockButton.title = track.locked
+                ? 'Unlock this lane so global actions include it'
+                : 'Lock this lane to skip global actions'
+              lockButton.addEventListener('click', (ev) => {
+                ev.preventDefault()
+                setTrackLocked(track.id, !track.locked)
+              })
+              headerRow.appendChild(lockButton)
+            }
 
             if (track.type !== 'normal') {
               const badge = document.createElement('span')
@@ -1977,13 +2444,21 @@
             metaRow.appendChild(countSpan)
 
             if (track.type === 'normal') {
-              const rolesCountSpan = document.createElement('span')
-              const roleCount = track.roleIds.length
-              rolesCountSpan.textContent = `${roleCount} role${roleCount === 1 ? '' : 's'}`
-              metaRow.appendChild(rolesCountSpan)
-            }
+               const rolesCountSpan = document.createElement('span')
+               const roleCount = track.roleIds.length
+               rolesCountSpan.textContent = `${roleCount} role${roleCount === 1 ? '' : 's'}`
+               metaRow.appendChild(rolesCountSpan)
 
-            const isFull =
+               if (track.locked) {
+                 const lockedBadge = document.createElement('span')
+                 lockedBadge.className = 'badge badge-locked'
+                 lockedBadge.textContent = 'Locked'
+                 metaRow.appendChild(lockedBadge)
+               }
+             }
+
+             const isFull =
+
               track.type === 'normal' &&
               track.capacity != null &&
               assigned >= track.capacity
@@ -2091,6 +2566,9 @@
             peopleList.className =
               'people-list' + (track.personIds.length ? '' : ' empty')
             peopleList.dataset.trackId = track.id
+            peopleList.addEventListener('dragenter', (ev) =>
+              onDragEnterList(ev, track.id),
+            )
             peopleList.addEventListener('dragover', (ev) =>
               onDragOverList(ev, track.id),
             )
@@ -2253,6 +2731,9 @@
             rolesList.className = 'roles-list'
             rolesList.dataset.trackId = track.id
             if (track.type === 'normal') {
+              rolesList.addEventListener('dragenter', (ev) =>
+                onDragEnterRolesList(ev, track.id),
+              )
               rolesList.addEventListener('dragover', (ev) =>
                 onDragOverRolesList(ev, track.id),
               )
