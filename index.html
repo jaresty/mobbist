@@ -639,6 +639,7 @@
       <section class="tracks-toolbar">
         <div class="muted" style="font-size:0.8rem;">
           Tracks: On Deck distributes into all normal tracks. Out of Office is excluded from random allocation.
+          Automatic: Dragging a person to the drop zone creates a fresh track, and allocation or shuffle actions add lanes when capacity runs out.
         </div>
         <div class="muted" style="font-size:0.75rem; display:flex; align-items:center; gap:4px; flex-wrap:wrap;">
            <label for="defaultCapacityInput">Default capacity:</label>
@@ -2396,6 +2397,25 @@
             titleSpan.className = 'track-title'
             titleSpan.textContent = track.name
             titleSpan.style.flex = '1'
+
+            if (track.type === 'normal') {
+              titleSpan.style.cursor = 'pointer'
+              titleSpan.title = 'Click to rename track'
+              titleSpan.addEventListener('click', () => {
+                const nextName = prompt('New track name?', track.name)
+                if (nextName == null) return
+                const trimmed = nextName.trim()
+                if (!trimmed || trimmed === track.name) return
+                if (isTrackLocked(track)) {
+                  const allowed = shouldAllowLockedTrackEdit(
+                    track,
+                    `"${track.name}" is locked. Rename this track?`,
+                  )
+                  if (!allowed) return
+                }
+                updateTrackName(track.id, trimmed)
+              })
+            }
 
             headerRow.appendChild(titleSpan)
 
