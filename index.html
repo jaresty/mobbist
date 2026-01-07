@@ -329,6 +329,26 @@
         gap: 4px;
       }
 
+      .tenure-config-button {
+        padding: 2px 6px;
+        font-size: 0.7rem;
+        border-radius: 4px;
+        border: 1px solid var(--border);
+        background: #ffffff;
+        cursor: pointer;
+      }
+
+      .tenure-config-button:hover {
+        border-color: var(--accent);
+        color: var(--accent);
+      }
+
+      .tenure-config-button[data-overridden='true'] {
+        background: rgba(59, 130, 246, 0.12);
+        border-color: rgba(59, 130, 246, 0.4);
+        color: #1d4ed8;
+      }
+
       .people-list {
         flex: 1;
         display: flex;
@@ -492,6 +512,65 @@
         background: #ffffff;
         border: 1px solid var(--border);
         font-size: 0.85rem;
+        cursor: grab;
+      }
+
+      .person:active {
+        cursor: grabbing;
+      }
+
+      .person.person-dragging {
+        opacity: 0.85;
+      }
+
+      .person-header {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        flex: 1 1 auto;
+        min-width: 0;
+      }
+
+      .person-tenure-soft {
+        box-shadow: inset 0 0 0 1px rgba(234, 179, 8, 0.45);
+        background: linear-gradient(90deg, rgba(234, 179, 8, 0.12), #ffffff);
+      }
+
+      .person-tenure-hard {
+        box-shadow: inset 0 0 0 1px rgba(220, 38, 38, 0.5);
+        background: linear-gradient(90deg, rgba(248, 113, 113, 0.16), #ffffff);
+      }
+
+      .person-tenure-indicator {
+        border: 1px solid transparent;
+        border-radius: 999px;
+        padding: 2px 6px;
+        font-size: 0.7rem;
+        line-height: 1.1;
+        background: rgba(15, 23, 42, 0.05);
+        color: #334155;
+        cursor: pointer;
+        flex: 0 0 auto;
+        align-self: center;
+      }
+
+      .person-tenure-indicator-soft {
+        background: rgba(234, 179, 8, 0.18);
+        color: #92400e;
+      }
+
+      .person-tenure-indicator-hard {
+        background: rgba(220, 38, 38, 0.2);
+        color: #991b1b;
+      }
+
+      .person-tenure-indicator:hover {
+        border-color: rgba(0, 0, 0, 0.08);
+      }
+
+      .person-tenure-indicator:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
       }
 
       .person-name {
@@ -641,12 +720,18 @@
           Tracks: On Deck distributes into all normal tracks. Out of Office is excluded from random allocation.
           Automatic: Dragging a person to the drop zone creates a fresh track, and allocation or shuffle actions add lanes when capacity runs out.
         </div>
-        <div class="muted" style="font-size:0.75rem; display:flex; align-items:center; gap:4px; flex-wrap:wrap;">
+        <div class="muted" style="font-size:0.75rem; display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
            <label for="defaultCapacityInput">Default capacity:</label>
-            <input id="defaultCapacityInput" type="number" min="1" value="2" style="width:3rem; padding:2px 4px; font-size:0.75rem;" />
-            <button id="sweepAllTracksButton" class="primary" disabled>Sweep all tracks</button>
-            <button id="deleteSelectedTracksButton" class="danger" disabled>Delete selected tracks</button>
-            <button id="deleteAllTracksButton" class="danger" disabled>Delete all tracks</button>
+           <input id="defaultCapacityInput" type="number" min="1" value="2" style="width:3rem; padding:2px 4px; font-size:0.75rem;" />
+           <label for="tenureSoftInput">Soft warn (days):</label>
+           <input id="tenureSoftInput" type="number" min="0.1" step="0.1" value="2" style="width:3rem; padding:2px 4px; font-size:0.75rem;" />
+           <label for="tenureHardInput">Strong warn (days):</label>
+           <input id="tenureHardInput" type="number" min="0.1" step="0.1" value="4" style="width:3rem; padding:2px 4px; font-size:0.75rem;" />
+           <button id="sweepAllTracksButton" class="primary" disabled>Sweep all tracks</button>
+           <button id="sortTenureButton" class="ghost" disabled>Sort by tenure</button>
+           <button id="listStrongTenureButton" class="ghost">Highlight strong alerts</button>
+           <button id="deleteSelectedTracksButton" class="danger" disabled>Delete selected tracks</button>
+           <button id="deleteAllTracksButton" class="danger" disabled>Delete all tracks</button>
          </div>
          <div id="capacityNotice" class="muted" style="font-size:0.75rem;"></div>
 
@@ -664,17 +749,352 @@
         const LEGACY_STORAGE_KEYS = ['pairPlanner:v1']
         const NEW_TRACK_OPTION_VALUE = '__create_new_track__'
         const HISTORY_LIMIT = 30
+        const DEFAULT_TENURE_SOFT_DAYS = 2
+        const DEFAULT_TENURE_HARD_DAYS = 4
 
         /**
          * @typedef {{ id: string, name: string }} Person
          * @typedef {{ id: string, name: string, color: string | null }} Role
          * @typedef {{ id: string, name: string, type: 'normal' | 'on_deck' | 'out_of_office', capacity: number | null, personIds: string[], roleIds: string[], locked?: boolean }} Track
-         * @typedef {{ people: Person[], roles: Role[], tracks: Track[], nextPersonId: number, nextTrackId: number, nextRoleId: number, defaultTrackCapacity: number }} PlannerState
+         * @typedef {{ softDays: number, hardDays: number }} TenureThresholds
+         * @typedef {{ trackId: string, assignedAt: number }} TenureAssignment
+         * @typedef {{ assignments: { [personId: string]: TenureAssignment | undefined }, overrides: { [trackId: string]: Partial<TenureThresholds> | undefined }, config: TenureThresholds }} TenureState
+         * @typedef {{ people: Person[], roles: Role[], tracks: Track[], nextPersonId: number, nextTrackId: number, nextRoleId: number, defaultTrackCapacity: number, tenure: TenureState }} PlannerState
          */
+
+
+        function normalizePositiveNumber(value) {
+          if (value == null) return null
+          const numeric = Number(value)
+          if (!Number.isFinite(numeric) || numeric <= 0) return null
+          return numeric
+        }
+
+        function normalizeTenureThresholds(input) {
+          const soft = normalizePositiveNumber(input && input.softDays)
+          const hard = normalizePositiveNumber(input && input.hardDays)
+          let softDays = soft != null ? soft : DEFAULT_TENURE_SOFT_DAYS
+          let hardDays = hard != null ? hard : Math.max(softDays, DEFAULT_TENURE_HARD_DAYS)
+          if (hardDays < softDays) {
+            hardDays = softDays
+          }
+          return { softDays, hardDays }
+        }
+
+        function normalizeTenureOverride(override, fallback) {
+          if (!override || typeof override !== 'object') {
+            return {}
+          }
+          const soft = normalizePositiveNumber(override.softDays)
+          const hard = normalizePositiveNumber(override.hardDays)
+          if (soft == null && hard == null) {
+            return {}
+          }
+          let softDays = soft != null ? soft : fallback.softDays
+          let hardDays = hard != null ? hard : fallback.hardDays
+          if (hardDays < softDays) {
+            hardDays = softDays
+          }
+          return {
+            softDays,
+            hardDays,
+          }
+        }
+
+        function createInitialTenureState() {
+          return {
+            assignments: {},
+            overrides: {},
+            config: {
+              softDays: DEFAULT_TENURE_SOFT_DAYS,
+              hardDays: DEFAULT_TENURE_HARD_DAYS,
+            },
+          }
+        }
+
+        function ensureTenureState(raw) {
+          const base = raw && typeof raw === 'object' ? raw : {}
+          const config = normalizeTenureThresholds(base.config || {})
+          const overrides = {}
+          if (base.overrides && typeof base.overrides === 'object') {
+            Object.keys(base.overrides).forEach((trackId) => {
+              const normalized = normalizeTenureOverride(base.overrides[trackId], config)
+              if (normalized.softDays != null && normalized.hardDays != null) {
+                overrides[trackId] = normalized
+              }
+            })
+          }
+          const assignments = {}
+          if (base.assignments && typeof base.assignments === 'object') {
+            Object.keys(base.assignments).forEach((personId) => {
+              const entry = base.assignments[personId]
+              const trackId =
+                entry && typeof entry.trackId === 'string' && entry.trackId.trim().length
+                  ? entry.trackId
+                  : null
+              const assignedAt = entry ? normalizePositiveNumber(entry.assignedAt) : null
+              if (trackId && assignedAt != null) {
+                assignments[personId] = { trackId, assignedAt }
+              }
+            })
+          }
+          return {
+            assignments,
+            overrides,
+            config,
+          }
+        }
+
+        function ensureTenureContainer() {
+          if (!state.tenure) {
+            state.tenure = createInitialTenureState()
+          }
+        }
+
+        function clearPersonTenure(personId) {
+          ensureTenureContainer()
+          if (state.tenure.assignments[personId]) {
+            delete state.tenure.assignments[personId]
+          }
+        }
+
+        function recordTenureAssignment(personId, targetTrack) {
+          ensureTenureContainer()
+          if (!targetTrack || targetTrack.type !== 'normal') {
+            clearPersonTenure(personId)
+            return
+          }
+          const existing = state.tenure.assignments[personId]
+          if (existing && existing.trackId === targetTrack.id) {
+            return
+          }
+          state.tenure.assignments[personId] = {
+            trackId: targetTrack.id,
+            assignedAt: Date.now(),
+          }
+        }
+
+        function getTenureAssignment(personId) {
+          ensureTenureContainer()
+          return state.tenure.assignments[personId] || null
+        }
+
+        function getEffectiveTenureThresholds(trackId) {
+          ensureTenureContainer()
+          const override = state.tenure.overrides[trackId]
+          if (override && override.softDays != null && override.hardDays != null) {
+            return {
+              softDays: override.softDays,
+              hardDays: override.hardDays,
+            }
+          }
+          return {
+            softDays: state.tenure.config.softDays,
+            hardDays: state.tenure.config.hardDays,
+          }
+        }
+
+        function hasTrackTenureOverride(trackId) {
+          ensureTenureContainer()
+          return Boolean(state.tenure.overrides[trackId])
+        }
+
+        function updateTrackTenureOverride(trackId, softDays, hardDays) {
+          ensureTenureContainer()
+          if (softDays == null && hardDays == null) {
+            if (state.tenure.overrides[trackId]) {
+              delete state.tenure.overrides[trackId]
+              return true
+            }
+            return false
+          }
+          const normalized = normalizeTenureOverride({ softDays, hardDays }, state.tenure.config)
+          if (!normalized.softDays || !normalized.hardDays) {
+            return false
+          }
+          if (
+            normalized.softDays === state.tenure.config.softDays &&
+            normalized.hardDays === state.tenure.config.hardDays
+          ) {
+            if (state.tenure.overrides[trackId]) {
+              delete state.tenure.overrides[trackId]
+              return true
+            }
+            return false
+          }
+          const existing = state.tenure.overrides[trackId]
+          if (
+            existing &&
+            existing.softDays === normalized.softDays &&
+            existing.hardDays === normalized.hardDays
+          ) {
+            return false
+          }
+          state.tenure.overrides[trackId] = normalized
+          return true
+        }
+
+        function clearTrackTenureOverride(trackId) {
+          ensureTenureContainer()
+          if (state.tenure.overrides[trackId]) {
+            delete state.tenure.overrides[trackId]
+            return true
+          }
+          return false
+        }
+
+        function getTrackTenureOverride(trackId) {
+          ensureTenureContainer()
+          return state.tenure.overrides[trackId] || null
+        }
+
+        function formatTenureThresholdValue(value) {
+          if (!Number.isFinite(value)) return ''
+          return Number.isInteger(value) ? String(value) : value.toFixed(1).replace(/\.0$/, '')
+        }
+
+        function setGlobalTenureConfig(softDays, hardDays) {
+          const normalized = normalizeTenureThresholds({ softDays, hardDays })
+          const description = `Set global tenure thresholds to ${formatTenureThresholdValue(normalized.softDays)}/${formatTenureThresholdValue(normalized.hardDays)} day(s)`
+          return mutateState(description, () => {
+            ensureTenureContainer()
+            const current = state.tenure.config
+            if (
+              current.softDays === normalized.softDays &&
+              current.hardDays === normalized.hardDays
+            ) {
+              return false
+            }
+            state.tenure.config = normalized
+            const overrides = state.tenure.overrides
+            for (const trackId of Object.keys(overrides)) {
+              const normalizedOverride = normalizeTenureOverride(overrides[trackId], normalized)
+              if (
+                normalizedOverride.softDays === normalized.softDays &&
+                normalizedOverride.hardDays === normalized.hardDays
+              ) {
+                delete overrides[trackId]
+              } else {
+                overrides[trackId] = normalizedOverride
+              }
+            }
+            return true
+          })
+        }
+
+        function getPersonTenureStatus(personId, track) {
+          if (!track || track.type !== 'normal') return null
+          const assignment = getTenureAssignment(personId)
+          if (!assignment || assignment.trackId !== track.id) return null
+          const thresholds = getEffectiveTenureThresholds(track.id)
+          const elapsedMs = Math.max(0, Date.now() - assignment.assignedAt)
+          const days = elapsedMs / (1000 * 60 * 60 * 24)
+          let status = 'ok'
+          if (days >= thresholds.hardDays) {
+            status = 'hard'
+          } else if (days >= thresholds.softDays) {
+            status = 'soft'
+          }
+          return {
+            status,
+            days,
+            thresholds,
+            assignedAt: assignment.assignedAt,
+          }
+        }
+
+        function formatTenureDuration(days) {
+          if (!Number.isFinite(days)) return ''
+          if (days >= 7) {
+            return `${Math.round(days)}d`
+          }
+          if (days >= 1) {
+            const rounded = Math.round(days * 10) / 10
+            return `${rounded}d`
+          }
+          const hours = days * 24
+          if (hours >= 1) {
+            return `${Math.round(hours)}h`
+          }
+          const minutes = Math.max(1, Math.round(hours * 60))
+          return `${minutes}m`
+        }
+
+        function collectTenureBreaches(level = 'soft') {
+          ensureTenureContainer()
+          const results = []
+          for (const track of state.tracks) {
+            if (track.type !== 'normal') continue
+            for (const personId of track.personIds) {
+              const person = getPersonById(personId)
+              if (!person) continue
+              const status = getPersonTenureStatus(personId, track)
+              if (!status) continue
+              if (level === 'hard') {
+                if (status.status === 'hard') {
+                  results.push({ person, track, status })
+                }
+              } else if (status.status === 'soft' || status.status === 'hard') {
+                results.push({ person, track, status })
+              }
+            }
+          }
+          return results
+        }
+
+        function hasStrongTenureBreaches() {
+          return collectTenureBreaches('hard').length > 0
+        }
+
+        function announceStrongTenureBreaches() {
+          const breaches = collectTenureBreaches('hard')
+          if (!breaches.length) {
+            alert('No one exceeds the strong tenure threshold.')
+            return
+          }
+          const lines = breaches
+            .map(({ person, track, status }) => {
+              const duration = formatTenureDuration(status.days)
+              return `${person.name} — ${track.name} (${duration})`
+            })
+            .join('\n')
+          alert(`People exceeding the strong tenure threshold:\n\n${lines}`)
+        }
+
+        function sortTracksByTenure() {
+          return mutateState('Sort tracks by tenure (longest first)', () => {
+            let changed = false
+            for (const track of state.tracks) {
+              if (track.type !== 'normal' || track.personIds.length < 2) continue
+              const sorted = [...track.personIds]
+              sorted.sort((a, b) => {
+                const aAssignment = getTenureAssignment(a)
+                const bAssignment = getTenureAssignment(b)
+                const aValue = aAssignment ? aAssignment.assignedAt : Infinity
+                const bValue = bAssignment ? bAssignment.assignedAt : Infinity
+                if (aValue === bValue) return 0
+                return aValue - bValue
+              })
+              let differs = false
+              for (let i = 0; i < sorted.length; i++) {
+                if (sorted[i] !== track.personIds[i]) {
+                  differs = true
+                  break
+                }
+              }
+              if (differs) {
+                track.personIds = sorted
+                changed = true
+              }
+            }
+            return changed
+          })
+        }
 
         /** @type {PlannerState} */
         let state
         let currentDragPersonId = null
+        let currentDragPersonEl = null
         let currentDragRoleId = null
         let pendingRetirePersonId = null
         /** @type {Set<string>} */
@@ -691,6 +1111,7 @@
         let redoButtonEl = null
         let historyShortcutBound = false
         let historyOverlayEl = null
+        let suppressTenureIndicatorClickUntil = 0
 
         function createInitialState() {
 
@@ -730,6 +1151,7 @@
             nextTrackId: 2,
             nextRoleId: 1,
             defaultTrackCapacity: 2,
+            tenure: createInitialTenureState(),
           }
         }
 
@@ -849,6 +1271,28 @@
             if (typeof parsed.defaultTrackCapacity !== 'number' || parsed.defaultTrackCapacity < 1) {
               parsed.defaultTrackCapacity = 2
             }
+            parsed.tenure = ensureTenureState(parsed.tenure)
+            const trackIdSet = new Set(parsed.tracks.map((track) => track.id))
+            const normalTrackIdSet = new Set(
+              parsed.tracks.filter((track) => track.type === 'normal').map((track) => track.id),
+            )
+            const personIdSet = new Set(parsed.people.map((person) => person.id))
+            Object.keys(parsed.tenure.assignments).forEach((personId) => {
+              const info = parsed.tenure.assignments[personId]
+              if (
+                !info ||
+                !trackIdSet.has(info.trackId) ||
+                !normalTrackIdSet.has(info.trackId) ||
+                !personIdSet.has(personId)
+              ) {
+                delete parsed.tenure.assignments[personId]
+              }
+            })
+            Object.keys(parsed.tenure.overrides).forEach((trackId) => {
+              if (!normalTrackIdSet.has(trackId)) {
+                delete parsed.tenure.overrides[trackId]
+              }
+            })
             return parsed
           } catch (e) {
             console.warn('Failed to load planner state, resetting.', e)
@@ -966,6 +1410,11 @@
             locked: false,
           }
           state.tracks.push(track)
+          if (track.personIds.length) {
+            for (const personId of track.personIds) {
+              recordTenureAssignment(personId, track)
+            }
+          }
           return track
         }
 
@@ -1236,6 +1685,19 @@
 
         function applyStateSnapshot(snapshot) {
           state = snapshotPlannerState(snapshot)
+          if (!state.tenure) {
+            state.tenure = createInitialTenureState()
+          } else {
+            state.tenure = ensureTenureState(state.tenure)
+          }
+          const normalTrackIds = new Set(
+            state.tracks.filter((track) => track.type === 'normal').map((track) => track.id),
+          )
+          Object.keys(state.tenure.overrides).forEach((trackId) => {
+            if (!normalTrackIds.has(trackId)) {
+              delete state.tenure.overrides[trackId]
+            }
+          })
           selectedTrackIds = new Set()
           pendingRetirePersonId = null
         }
@@ -1407,7 +1869,18 @@
             target.personIds.push(personId)
           }
 
+          if (target.type === 'normal') {
+            recordTenureAssignment(personId, target)
+          } else {
+            clearPersonTenure(personId)
+          }
+
           return true
+        }
+
+        function attachDragEvents(element) {
+          if (!element) return
+          element.draggable = false
         }
 
         function movePersonToTrack(personId, targetTrackId, options = {}) {
@@ -1651,6 +2124,11 @@
 
           track.personIds = [keepId]
           onDeck.personIds.push(...toMove)
+          if (toMove.length) {
+            for (const personId of toMove) {
+              clearPersonTenure(personId)
+            }
+          }
 
           return true
         }
@@ -1753,11 +2231,13 @@
               const capacity = track.capacity == null ? Infinity : track.capacity
               let availableSlots = capacity - track.personIds.length
               while (availableSlots > 0 && remaining.length) {
-                const id = remaining.pop()
-                if (!id) break
-                track.personIds.push(id)
-                availableSlots--
-                changed = true
+                 const id = remaining.pop()
+                 if (!id) break
+                 track.personIds.push(id)
+                 recordTenureAssignment(id, track)
+                 availableSlots--
+                 changed = true
+
               }
             }
 
@@ -1784,22 +2264,30 @@
           if (!onDeck) return false
           const description = `Delete track ${track.name}`
           return mutateState(description, () => {
-            const rolesToReassign = Array.isArray(track.roleIds) ? [...track.roleIds] : []
-            let fallback = state.tracks.find((t) => t.type === 'normal' && t.id !== trackId)
-            if (!fallback && rolesToReassign.length) {
-              fallback = createNormalTrack()
-            }
-            if (fallback && rolesToReassign.length) {
-              for (const roleId of rolesToReassign) {
-                if (!fallback.roleIds.includes(roleId)) {
-                  fallback.roleIds.push(roleId)
+             const rolesToReassign = Array.isArray(track.roleIds) ? [...track.roleIds] : []
+             let fallback = state.tracks.find((t) => t.type === 'normal' && t.id !== trackId)
+             if (!fallback && rolesToReassign.length) {
+               fallback = createNormalTrack()
+             }
+             if (fallback && rolesToReassign.length) {
+               for (const roleId of rolesToReassign) {
+                 if (!fallback.roleIds.includes(roleId)) {
+                   fallback.roleIds.push(roleId)
+                 }
+               }
+             }
+              if (track.personIds.length) {
+                for (const personId of track.personIds) {
+                  clearPersonTenure(personId)
                 }
               }
-            }
-            onDeck.personIds.push(...track.personIds)
-            state.tracks = state.tracks.filter((t) => t.id !== trackId)
-            selectedTrackIds.delete(trackId)
-            return true
+              clearTrackTenureOverride(track.id)
+              onDeck.personIds.push(...track.personIds)
+              state.tracks = state.tracks.filter((t) => t.id !== trackId)
+              selectedTrackIds.delete(trackId)
+              return true
+
+
           })
         }
 
@@ -1819,13 +2307,20 @@
               : `Delete ${deletableTracks.length} unlocked track(s)`
 
           return mutateState(description, () => {
-            const rolesToReassign = []
-            for (const track of deletableTracks) {
-              onDeck.personIds.push(...track.personIds)
-              if (Array.isArray(track.roleIds) && track.roleIds.length) {
-                rolesToReassign.push(...track.roleIds)
-              }
-            }
+             const rolesToReassign = []
+             for (const track of deletableTracks) {
+               if (track.personIds.length) {
+                 for (const personId of track.personIds) {
+                   clearPersonTenure(personId)
+                 }
+               }
+               clearTrackTenureOverride(track.id)
+               onDeck.personIds.push(...track.personIds)
+               if (Array.isArray(track.roleIds) && track.roleIds.length) {
+                 rolesToReassign.push(...track.roleIds)
+               }
+             }
+
 
             const deletableIds = new Set(deletableTracks.map((track) => track.id))
             state.tracks = state.tracks.filter(
@@ -1870,13 +2365,20 @@
               : `Delete ${tracksToDelete.length} selected tracks`
 
           return mutateState(description, () => {
-            const rolesToReassign = []
-            for (const track of tracksToDelete) {
-              onDeck.personIds.push(...track.personIds)
-              if (Array.isArray(track.roleIds) && track.roleIds.length) {
-                rolesToReassign.push(...track.roleIds)
-              }
-            }
+             const rolesToReassign = []
+             for (const track of tracksToDelete) {
+               if (track.personIds.length) {
+                 for (const personId of track.personIds) {
+                   clearPersonTenure(personId)
+                 }
+               }
+               clearTrackTenureOverride(track.id)
+               onDeck.personIds.push(...track.personIds)
+               if (Array.isArray(track.roleIds) && track.roleIds.length) {
+                 rolesToReassign.push(...track.roleIds)
+               }
+             }
+
 
             state.tracks = state.tracks.filter(
               (t) => !(t.type === 'normal' && selectedTrackIds.has(t.id)),
@@ -1949,6 +2451,9 @@
             if (track.personIds.length > newCapacity) {
               const overflow = track.personIds.splice(newCapacity)
               if (overflow.length) {
+                for (const personId of overflow) {
+                  clearPersonTenure(personId)
+                }
                 onDeck.personIds.push(...overflow)
                 changed = true
               }
@@ -1958,7 +2463,44 @@
           })
         }
 
+        function promptTrackTenureOverride(trackId) {
+          const track = getTrackById(trackId)
+          if (!track || track.type !== 'normal') return false
+          ensureTenureContainer()
+          const override = getTrackTenureOverride(trackId)
+          const globalSoft = formatTenureThresholdValue(state.tenure.config.softDays)
+          const globalHard = formatTenureThresholdValue(state.tenure.config.hardDays)
+          const softDefault = override ? formatTenureThresholdValue(override.softDays) : ''
+          const hardDefault = override ? formatTenureThresholdValue(override.hardDays) : ''
+          const softPrompt = window.prompt(
+            `Soft warning threshold (days) for "${track.name}". Leave blank to inherit global (${globalSoft}).`,
+            softDefault,
+          )
+          if (softPrompt === null) return false
+          const hardPrompt = window.prompt(
+            `Strong warning threshold (days) for "${track.name}". Leave blank to inherit global (${globalHard}).`,
+            hardDefault,
+          )
+          if (hardPrompt === null) return false
+          const softValue = softPrompt.trim() === '' ? null : Number(softPrompt)
+          const hardValue = hardPrompt.trim() === '' ? null : Number(hardPrompt)
+          if (softValue != null && (!Number.isFinite(softValue) || softValue <= 0)) {
+            alert('Soft warning threshold must be a positive number.')
+            return false
+          }
+          if (hardValue != null && (!Number.isFinite(hardValue) || hardValue <= 0)) {
+            alert('Strong warning threshold must be a positive number.')
+            return false
+          }
+          const description =
+            softValue == null && hardValue == null
+              ? `Clear tenure override for ${track.name}`
+              : `Set tenure override for ${track.name}`
+          return mutateState(description, () => updateTrackTenureOverride(trackId, softValue, hardValue))
+        }
+
         function updateTrackName(trackId, newName) {
+
           const track = getTrackById(trackId)
           if (!track || track.type !== 'normal') return false
           const trimmed = newName.trim()
@@ -2049,21 +2591,49 @@
             if (state.people.length === originalCount) {
               return false
             }
-            for (const track of state.tracks) {
-              track.personIds = track.personIds.filter((id) => id !== personId)
-            }
-            pendingRetirePersonId = null
+             for (const track of state.tracks) {
+               track.personIds = track.personIds.filter((id) => id !== personId)
+             }
+             clearPersonTenure(personId)
+             pendingRetirePersonId = null
+
             return true
           })
         }
 
         function onDragStartPerson(ev, personId) {
           currentDragPersonId = personId
-          ev.dataTransfer.effectAllowed = 'move'
-          setDropZoneActive(true)
+          if (ev?.currentTarget instanceof HTMLElement) {
+            currentDragPersonEl = ev.currentTarget
+            currentDragPersonEl.classList.add('person-dragging')
+          } else {
+            currentDragPersonEl = null
+          }
+          if (ev && ev.target && ev.target.closest('.person-tenure-indicator')) {
+            suppressTenureIndicatorClickUntil = Date.now() + 400
+          } else {
+            suppressTenureIndicatorClickUntil = 0
+          }
+          if (ev && ev.dataTransfer) {
+            try {
+              ev.dataTransfer.effectAllowed = 'move'
+              ev.dataTransfer.dropEffect = 'move'
+              ev.dataTransfer.setData('text/plain', personId)
+              ev.dataTransfer.setData('application/x-mobbist-person-id', personId)
+            } catch (error) {}
+          }
+          requestAnimationFrame(() => {
+            setDropZoneActive(true)
+          })
+
+
         }
 
-        function onDragEndPerson() {
+        function onDragEndPerson(ev) {
+          if (currentDragPersonEl) {
+            currentDragPersonEl.classList.remove('person-dragging')
+            currentDragPersonEl = null
+          }
           currentDragPersonId = null
           const lists = document.querySelectorAll('.people-list')
           lists.forEach((el) => {
@@ -2177,9 +2747,12 @@
           clearListDropTarget(el)
 
           const personId = currentDragPersonId
+          if (!personId) {
+            return
+          }
+
           currentDragPersonId = null
           setDropZoneActive(false)
-          if (!personId) return
 
           movePersonToTrack(personId, trackId)
         }
@@ -2218,6 +2791,19 @@
           currentDragPersonId = null
           createTrackFromPersonDrop(personId)
           setDropZoneActive(false)
+        }
+
+        function onGlobalDragOver(ev) {
+          if (!currentDragPersonId && !currentDragRoleId) return
+          ev.preventDefault()
+          if (ev.dataTransfer) {
+            ev.dataTransfer.dropEffect = 'move'
+          }
+        }
+
+        function onGlobalDrop(ev) {
+          if (!currentDragPersonId && !currentDragRoleId) return
+          ev.preventDefault()
         }
 
         function onDragStartRole(ev, roleId) {
@@ -2294,6 +2880,15 @@
             defaultCapacityInput.value = String(getDefaultTrackCapacity())
           }
 
+          const tenureSoftInput = document.getElementById('tenureSoftInput')
+          const tenureHardInput = document.getElementById('tenureHardInput')
+          if (tenureSoftInput && tenureHardInput) {
+            ensureTenureContainer()
+            const thresholds = state.tenure.config
+            tenureSoftInput.value = formatTenureThresholdValue(thresholds.softDays)
+            tenureHardInput.value = formatTenureThresholdValue(thresholds.hardDays)
+          }
+
           const deleteSelectedTracksButton = document.getElementById('deleteSelectedTracksButton')
           if (deleteSelectedTracksButton) {
             const hasSelected = Array.from(selectedTrackIds).some((id) => {
@@ -2315,6 +2910,32 @@
           if (deleteAllTracksButton) {
             const hasAnyNormalTrack = state.tracks.some((t) => t.type === 'normal')
             deleteAllTracksButton.disabled = !hasAnyNormalTrack
+          }
+
+          const sortTenureButton = document.getElementById('sortTenureButton')
+          if (sortTenureButton) {
+            const anySortable = state.tracks.some(
+              (track) => track.type === 'normal' && track.personIds.length > 1,
+            )
+            sortTenureButton.disabled = !anySortable
+          }
+
+          const listStrongTenureButton = document.getElementById('listStrongTenureButton')
+          if (listStrongTenureButton) {
+            listStrongTenureButton.disabled = false
+            const hasAlerts = hasStrongTenureBreaches()
+            if (hasAlerts) {
+              listStrongTenureButton.classList.add('primary')
+              listStrongTenureButton.classList.remove('ghost')
+            } else {
+              listStrongTenureButton.classList.remove('primary')
+              if (!listStrongTenureButton.classList.contains('ghost')) {
+                listStrongTenureButton.classList.add('ghost')
+              }
+            }
+            listStrongTenureButton.title = hasAlerts
+              ? 'Strong alerts present. Click to list them.'
+              : 'No strong alerts. Click to confirm.'
           }
 
           const shuffleRolesButton = document.getElementById('shuffleRolesButton')
@@ -2515,6 +3136,23 @@
               capWrapper.appendChild(capInput)
               metaRow.appendChild(capWrapper)
 
+              const tenureButton = document.createElement('button')
+              tenureButton.type = 'button'
+              tenureButton.className = 'tenure-config-button'
+              const tenureThresholds = getEffectiveTenureThresholds(track.id)
+              const tenureSoftLabel = formatTenureThresholdValue(tenureThresholds.softDays)
+              const tenureHardLabel = formatTenureThresholdValue(tenureThresholds.hardDays)
+              const overriddenTenure = hasTrackTenureOverride(track.id)
+              tenureButton.dataset.overridden = overriddenTenure ? 'true' : 'false'
+              tenureButton.textContent = `Tenure ${tenureSoftLabel}/${tenureHardLabel}d`
+              tenureButton.title = overriddenTenure
+                ? `Custom tenure thresholds for ${track.name}. Click to adjust or clear.`
+                : `Using global tenure thresholds. Click to override for ${track.name}.`
+              tenureButton.addEventListener('click', () => {
+                promptTrackTenureOverride(track.id)
+              })
+              metaRow.appendChild(tenureButton)
+
               if (isFull) {
                 const fullLabel = document.createElement('span')
                 fullLabel.className = 'track-type'
@@ -2620,12 +3258,56 @@
                 nameSpan.textContent = person.name
                 nameSpan.style.cursor = 'pointer'
                 nameSpan.title = 'Click to rename person'
+                nameSpan.draggable = false
                 nameSpan.addEventListener('click', () => {
                   const newName = prompt('New name?', person.name)
                   if (!newName) return
                   updatePersonName(person.id, newName)
                 })
-                personEl.appendChild(nameSpan)
+
+                const nameContainer = document.createElement('div')
+                nameContainer.className = 'person-header'
+                nameContainer.appendChild(nameSpan)
+
+                let tenureIndicatorButton = null
+                if (track.type === 'normal') {
+                  const tenureStatus = getPersonTenureStatus(person.id, track)
+                  if (tenureStatus && tenureStatus.status !== 'ok') {
+                    const indicator = document.createElement('button')
+                    indicator.type = 'button'
+                    indicator.className = 'person-tenure-indicator'
+                    indicator.dataset.status = tenureStatus.status
+                    if (tenureStatus.status === 'soft') {
+                      indicator.classList.add('person-tenure-indicator-soft')
+                      personEl.classList.add('person-tenure-soft')
+                    } else if (tenureStatus.status === 'hard') {
+                      indicator.classList.add('person-tenure-indicator-hard')
+                      personEl.classList.add('person-tenure-hard')
+                    }
+                    const tenureLabel = formatTenureDuration(tenureStatus.days)
+                    const softLabel = formatTenureThresholdValue(tenureStatus.thresholds.softDays)
+                    const hardLabel = formatTenureThresholdValue(tenureStatus.thresholds.hardDays)
+                    indicator.textContent = tenureLabel
+                    indicator.title = `${person.name} has been in ${track.name} for ${tenureLabel}. Soft warning ${softLabel}d, strong ${hardLabel}d. Click to sweep to On Deck.`
+                    indicator.draggable = false
+                    indicator.addEventListener('click', (ev) => {
+
+                      if (Date.now() < suppressTenureIndicatorClickUntil) {
+                        return
+                      }
+                      ev.preventDefault()
+                      sweepPerson(person.id)
+                    })
+                    personEl.dataset.tenureStatus = tenureStatus.status
+                    tenureIndicatorButton = indicator
+                  }
+                }
+
+                if (tenureIndicatorButton) {
+                  nameContainer.appendChild(tenureIndicatorButton)
+                }
+
+                personEl.appendChild(nameContainer)
 
                 const actions = document.createElement('div')
                 actions.className = 'person-actions'
@@ -2649,6 +3331,7 @@
                   shuffleBtn.title = 'Shuffle to another track'
                   shuffleBtn.className = 'primary'
                   shuffleBtn.dataset.label = 'Shuffle'
+                  shuffleBtn.draggable = false
                   shuffleBtn.addEventListener('click', () => {
                     shufflePerson(person.id)
                   })
@@ -2658,6 +3341,7 @@
                     const sweepBtn = document.createElement('button')
                     sweepBtn.textContent = '⬅️'
                     sweepBtn.title = 'Sweep to On Deck'
+                    sweepBtn.draggable = false
                     sweepBtn.addEventListener('click', () => {
                       sweepPerson(person.id)
                     })
@@ -2716,6 +3400,7 @@
                   retireBtn.className = 'retire-button'
                   retireBtn.title = 'Retire from planner'
                 }
+                attachDragEvents(retireBtn, person.id)
                 retireBtn.addEventListener('click', () => {
                   if (pendingRetirePersonId === person.id) {
                     retirePerson(person.id)
@@ -2730,6 +3415,7 @@
                   const cancelRetireBtn = document.createElement('button')
                   cancelRetireBtn.textContent = '✖️'
                   cancelRetireBtn.title = 'Cancel'
+                  attachDragEvents(cancelRetireBtn, person.id)
                   cancelRetireBtn.addEventListener('click', () => {
                     pendingRetirePersonId = null
                     render()
@@ -2934,6 +3620,8 @@
 
           if (!historyShortcutBound) {
             document.addEventListener('keydown', handleHistoryShortcut)
+            document.addEventListener('dragover', onGlobalDragOver, true)
+            document.addEventListener('drop', onGlobalDrop, true)
             historyShortcutBound = true
           }
 
@@ -3005,6 +3693,52 @@
                 state.defaultTrackCapacity = value
                 return true
               })
+            })
+          }
+
+          const tenureSoftInput = document.getElementById('tenureSoftInput')
+          const tenureHardInput = document.getElementById('tenureHardInput')
+          const handleTenureInputChange = () => {
+            ensureTenureContainer()
+            const softRaw = tenureSoftInput ? tenureSoftInput.value.trim() : ''
+            const hardRaw = tenureHardInput ? tenureHardInput.value.trim() : ''
+            const softValue = softRaw ? Number(softRaw) : state.tenure.config.softDays
+            const hardValue = hardRaw ? Number(hardRaw) : state.tenure.config.hardDays
+            if (!Number.isFinite(softValue) || softValue <= 0) {
+              if (tenureSoftInput) {
+                tenureSoftInput.value = formatTenureThresholdValue(state.tenure.config.softDays)
+              }
+              alert('Soft warning threshold must be a positive number.')
+              return
+            }
+            if (!Number.isFinite(hardValue) || hardValue <= 0) {
+              if (tenureHardInput) {
+                tenureHardInput.value = formatTenureThresholdValue(state.tenure.config.hardDays)
+              }
+              alert('Strong warning threshold must be a positive number.')
+              return
+            }
+            setGlobalTenureConfig(softValue, hardValue)
+          }
+
+          if (tenureSoftInput) {
+            tenureSoftInput.addEventListener('change', handleTenureInputChange)
+          }
+          if (tenureHardInput) {
+            tenureHardInput.addEventListener('change', handleTenureInputChange)
+          }
+
+          const sortTenureButtonEl = document.getElementById('sortTenureButton')
+          if (sortTenureButtonEl) {
+            sortTenureButtonEl.addEventListener('click', () => {
+              sortTracksByTenure()
+            })
+          }
+
+          const listStrongTenureButtonEl = document.getElementById('listStrongTenureButton')
+          if (listStrongTenureButtonEl) {
+            listStrongTenureButtonEl.addEventListener('click', () => {
+              announceStrongTenureBreaches()
             })
           }
 
