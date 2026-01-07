@@ -709,7 +709,7 @@
             <button id="redoButton" class="ghost history-btn" disabled>Redo</button>
           </div>
           <div class="history-shortcuts-hint" aria-hidden="true">
-            Undo: ⌘Z / Ctrl+Z · Redo: ⇧⌘Z / Ctrl+Y
+            Undo: ⌘Z / Ctrl+Z · Redo: ⇧⌘Z / Ctrl+Shift+Z / Ctrl+Y
           </div>
         </div>
       </div>
@@ -1757,10 +1757,10 @@
         function handleHistoryShortcut(ev) {
           if (ev.defaultPrevented) return
           const key = typeof ev.key === 'string' ? ev.key.toLowerCase() : ''
-          const isUndoShortcut = (ev.metaKey || ev.ctrlKey) && key === 'z' && !ev.altKey
+          const isUndoShortcut = (ev.metaKey || ev.ctrlKey) && key === 'z' && !ev.altKey && !ev.shiftKey
           const isRedoShortcut =
-            (ev.metaKey && key === 'z' && ev.shiftKey && !ev.altKey) ||
-            (ev.ctrlKey && !ev.metaKey && key === 'y' && !ev.altKey)
+            ((ev.metaKey || ev.ctrlKey) && key === 'z' && ev.shiftKey && !ev.altKey) ||
+            (ev.ctrlKey && !ev.metaKey && key === 'y' && !ev.altKey && !ev.shiftKey)
 
           if (!isUndoShortcut && !isRedoShortcut) return
 
