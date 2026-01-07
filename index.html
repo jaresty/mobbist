@@ -72,6 +72,13 @@
         padding-top: 6px;
       }
 
+      .history-shortcuts-hint {
+        font-size: 0.7rem;
+        color: var(--muted);
+        margin-top: 4px;
+        text-align: right;
+      }
+
       .controls .history-btn {
         min-width: 180px;
         text-align: left;
@@ -700,6 +707,9 @@
           <div class="controls-row history-controls">
             <button id="undoButton" class="ghost history-btn" disabled>Undo</button>
             <button id="redoButton" class="ghost history-btn" disabled>Redo</button>
+          </div>
+          <div class="history-shortcuts-hint" aria-hidden="true">
+            Undo: ⌘Z / Ctrl+Z · Redo: ⇧⌘Z / Ctrl+Y
           </div>
         </div>
       </div>
