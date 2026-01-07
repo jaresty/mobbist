@@ -708,6 +708,10 @@
             <button id="undoButton" class="ghost history-btn" disabled>Undo</button>
             <button id="redoButton" class="ghost history-btn" disabled>Redo</button>
           </div>
+          <div class="controls-row clipboard-controls">
+            <button id="exportClipboardButton" class="ghost">Copy board as Markdown</button>
+            <button id="importClipboardButton" class="ghost">Import board from clipboard</button>
+          </div>
           <div class="history-shortcuts-hint" aria-hidden="true">
             Undo: ⌘Z / Ctrl+Z · Redo: ⇧⌘Z / Ctrl+Shift+Z / Ctrl+Y
           </div>
@@ -761,6 +765,9 @@
         const HISTORY_LIMIT = 30
         const DEFAULT_TENURE_SOFT_DAYS = 2
         const DEFAULT_TENURE_HARD_DAYS = 4
+        const CLIPBOARD_FORMAT_ID = 'mobbist.markdown'
+        const CLIPBOARD_FORMAT_VERSION = '1'
+        const CLIPBOARD_SUPPORTED_MAJOR_VERSION = 1
 
         /**
          * @typedef {{ id: string, name: string }} Person
@@ -771,9 +778,53 @@
          * @typedef {{ assignments: { [personId: string]: TenureAssignment | undefined }, overrides: { [trackId: string]: Partial<TenureThresholds> | undefined }, config: TenureThresholds }} TenureState
          * @typedef {{ people: Person[], roles: Role[], tracks: Track[], nextPersonId: number, nextTrackId: number, nextRoleId: number, defaultTrackCapacity: number, tenure: TenureState }} PlannerState
          */
+ 
+ 
+         function formatClipboardTokens(entries) {
+           if (!entries || !entries.length) return ''
+           const parts = []
+           for (const entry of entries) {
+             if (!entry || !entry.key) continue
+             const key = String(entry.key).trim().toLowerCase()
+             if (!key) continue
+             if (entry.value == null || entry.value === '') {
+               parts.push(`[${key}]`)
+             } else {
+               const value = String(entry.value).replace(/([\[\]])/g, '\\$1')
+               parts.push(`[${key}:${value}]`)
+             }
+           }
+           return parts.length ? ' ' + parts.join(' ') : ''
+         }
+ 
+         function parseBracketTokens(segment) {
+           if (typeof segment !== 'string') {
+             return { text: '', tokens: {} }
+           }
+           const tokenRegex = /\[([^\[\]]+)\]/g
+           const tokens = {}
+           let match
+           while ((match = tokenRegex.exec(segment))) {
+             const tokenContent = match[1].trim()
+             if (!tokenContent) continue
+             const unescaped = tokenContent.replace(/\\([\[\]])/g, '$1')
+             const colonIndex = unescaped.indexOf(':')
+             if (colonIndex === -1) {
+               tokens[unescaped.toLowerCase()] = true
+             } else {
+               const key = unescaped.slice(0, colonIndex).trim().toLowerCase()
+               const value = unescaped.slice(colonIndex + 1).trim()
+               if (key) {
+                 tokens[key] = value
+               }
+             }
+           }
+           const text = segment.replace(/\s*\[[^\[\]]+\]\s*/g, ' ').replace(/\s{2,}/g, ' ').trim()
+           return { text, tokens }
+         }
+ 
+         function normalizePositiveNumber(value) {
 
-
-        function normalizePositiveNumber(value) {
           if (value == null) return null
           const numeric = Number(value)
           if (!Number.isFinite(numeric) || numeric <= 0) return null
@@ -1469,6 +1520,637 @@
           return JSON.parse(JSON.stringify(source))
         }
 
+        function serializePlannerStateToMarkdown(sourceState = state) {
+          const snapshot = snapshotPlannerState(sourceState)
+          const safeSnapshot =
+            snapshot && typeof snapshot === 'object' ? snapshot : createInitialState()
+          const tenureState = ensureTenureState(safeSnapshot.tenure)
+          const lines = []
+          const exportedAt = new Date().toISOString()
+          const defaultCapacity =
+            typeof safeSnapshot.defaultTrackCapacity === 'number' &&
+            safeSnapshot.defaultTrackCapacity >= 1
+              ? safeSnapshot.defaultTrackCapacity
+              : 2
+          lines.push('# Mobbist Board')
+          lines.push('')
+          lines.push('## Meta')
+          lines.push(`- format: ${CLIPBOARD_FORMAT_ID}`)
+          lines.push(`- version: ${CLIPBOARD_FORMAT_VERSION}`)
+          lines.push(`- exported_at: ${exportedAt}`)
+          lines.push(`- default_capacity: ${defaultCapacity}`)
+          lines.push(`- tenure_soft: ${tenureState.config.softDays}`)
+          lines.push(`- tenure_hard: ${tenureState.config.hardDays}`)
+          lines.push(
+            `- people: ${Array.isArray(safeSnapshot.people) ? safeSnapshot.people.length : 0}`,
+          )
+          lines.push(
+            `- tracks: ${Array.isArray(safeSnapshot.tracks) ? safeSnapshot.tracks.length : 0}`,
+          )
+          lines.push('')
+          const peopleById = new Map((safeSnapshot.people || []).map((person) => [person.id, person]))
+          const rolesById = new Map((safeSnapshot.roles || []).map((role) => [role.id, role]))
+          const assignments = tenureState.assignments || {}
+          const overrides = tenureState.overrides || {}
+          for (const track of safeSnapshot.tracks || []) {
+            const trackName =
+              typeof track.name === 'string' && track.name.trim().length
+                ? track.name.trim()
+                : track.id
+            const tokens = [
+              { key: 'id', value: track.id },
+              { key: 'type', value: track.type },
+            ]
+            if (track.capacity == null) {
+              tokens.push({ key: 'capacity', value: 'unbounded' })
+            } else {
+              tokens.push({ key: 'capacity', value: track.capacity })
+            }
+            if (track.locked) {
+              tokens.push({ key: 'locked' })
+            }
+            if (track.type === 'normal') {
+              const override = overrides[track.id]
+              if (override && override.softDays != null && override.hardDays != null) {
+                tokens.push({ key: 'tenure_soft', value: override.softDays })
+                tokens.push({ key: 'tenure_hard', value: override.hardDays })
+              }
+            }
+            lines.push(`## ${trackName}${formatClipboardTokens(tokens)}`)
+            const personIds = Array.isArray(track.personIds) ? track.personIds : []
+            if (personIds.length) {
+              for (const personId of personIds) {
+                const person = peopleById.get(personId)
+                if (!person) continue
+                const personTokens = [{ key: 'id', value: person.id }]
+                if (track.type === 'normal') {
+                  const assignment = assignments[person.id]
+                  if (
+                    assignment &&
+                    assignment.trackId === track.id &&
+                    typeof assignment.assignedAt === 'number' &&
+                    Number.isFinite(assignment.assignedAt)
+                  ) {
+                    personTokens.push({ key: 'tenure', value: assignment.assignedAt })
+                  }
+                }
+                const personName =
+                  typeof person.name === 'string' && person.name.trim().length
+                    ? person.name.trim()
+                    : person.id
+                lines.push(`- ${personName}${formatClipboardTokens(personTokens)}`)
+              }
+            } else {
+              lines.push('- (empty)')
+            }
+            if (track.type === 'normal') {
+              const roleIds = Array.isArray(track.roleIds) ? track.roleIds : []
+              if (roleIds.length) {
+                lines.push('Roles:')
+                for (const roleId of roleIds) {
+                  const role = rolesById.get(roleId)
+                  if (!role) continue
+                  const roleTokens = [{ key: 'id', value: role.id }]
+                  if (role.color) {
+                    roleTokens.push({ key: 'color', value: role.color })
+                  }
+                  const roleName =
+                    typeof role.name === 'string' && role.name.trim().length
+                      ? role.name.trim()
+                      : role.id
+                  lines.push(`- ${roleName}${formatClipboardTokens(roleTokens)}`)
+                }
+              }
+            }
+            lines.push('')
+          }
+          return lines.join('\n').replace(/\n{3,}/g, '\n\n').trim()
+        }
+
+        function parsePlannerMarkdown(markdown, options = {}) {
+          const source = typeof markdown === 'string' ? markdown : ''
+          if (!source.trim()) {
+            throw new Error('Clipboard data is empty.')
+          }
+          const normalized = source.replace(/\r\n/g, '\n')
+          const lines = normalized.split('\n')
+          const meta = {}
+          const tracks = []
+          let currentTrack = null
+          let inMeta = false
+          let inRoles = false
+
+          function finalizeTrack() {
+            if (currentTrack) {
+              tracks.push(currentTrack)
+              currentTrack = null
+            }
+          }
+
+          for (const rawLine of lines) {
+            const line = rawLine.trim()
+            if (!line) {
+              inRoles = false
+              continue
+            }
+            if (line.startsWith('## ')) {
+              const headingBody = line.slice(3).trim()
+              const { text, tokens } = parseBracketTokens(headingBody)
+              const headingName = text.trim()
+              if (!headingName) continue
+              if (headingName.toLowerCase() === 'meta') {
+                finalizeTrack()
+                inMeta = true
+                inRoles = false
+                continue
+              }
+              finalizeTrack()
+              currentTrack = { name: headingName, tokens, people: [], roles: [] }
+              inMeta = false
+              inRoles = false
+              continue
+            }
+            if (line.startsWith('#')) {
+              continue
+            }
+            if (inMeta) {
+              if (line.startsWith('- ')) {
+                const metaLine = line.slice(2).trim()
+                const colonIndex = metaLine.indexOf(':')
+                if (colonIndex !== -1) {
+                  const key = metaLine.slice(0, colonIndex).trim().toLowerCase()
+                  const value = metaLine.slice(colonIndex + 1).trim()
+                  if (key) {
+                    meta[key] = value
+                  }
+                }
+              }
+              continue
+            }
+            if (!currentTrack) {
+              continue
+            }
+            if (/^roles\s*:/i.test(line)) {
+              inRoles = true
+              continue
+            }
+            if (!line.startsWith('- ')) {
+              continue
+            }
+            const itemBody = line.slice(2).trim()
+            if (!itemBody || itemBody.toLowerCase() === '(empty)') {
+              continue
+            }
+            const { text, tokens } = parseBracketTokens(itemBody)
+            if (!text) continue
+            if (inRoles) {
+              currentTrack.roles.push({ name: text, tokens })
+            } else {
+              currentTrack.people.push({ name: text, tokens })
+            }
+          }
+
+          finalizeTrack()
+
+          if (!meta.format) {
+            throw new Error('Clipboard data missing format metadata.')
+          }
+          if (meta.format.trim().toLowerCase() !== CLIPBOARD_FORMAT_ID) {
+            throw new Error(`Unsupported clipboard format: ${meta.format}`)
+          }
+          const versionValue = meta.version ? String(meta.version).trim() : CLIPBOARD_FORMAT_VERSION
+          const major = Number(versionValue.split('.')[0])
+          if (!Number.isFinite(major)) {
+            throw new Error(`Invalid clipboard version: ${versionValue}`)
+          }
+          if (major > CLIPBOARD_SUPPORTED_MAJOR_VERSION) {
+            throw new Error(`Clipboard version ${versionValue} is not supported.`)
+          }
+
+          const existingState = options.existingState || state
+          const rebuiltState = buildStateFromParsedClipboard({ meta, tracks }, existingState)
+          return {
+            state: rebuiltState,
+            meta: {
+              exportedAt: meta.exported_at || meta['exported-at'] || null,
+              version: versionValue,
+            },
+          }
+        }
+
+        function buildStateFromParsedClipboard(parsed, existingState) {
+          const existing =
+            existingState && typeof existingState === 'object' ? existingState : createInitialState()
+          const newState = createInitialState()
+          newState.people = []
+          newState.roles = []
+          newState.tracks = []
+          newState.tenure = createInitialTenureState()
+          newState.tenure.assignments = {}
+          newState.tenure.overrides = {}
+
+          const meta = parsed && parsed.meta ? parsed.meta : {}
+          const tracksInput = parsed && Array.isArray(parsed.tracks) ? parsed.tracks : []
+
+          const personMap = new Map()
+          const roleMap = new Map()
+          const onDeckTracks = []
+          const outOfOfficeTracks = []
+          const normalTracks = []
+
+          const usedPersonIds = new Set()
+          const usedRoleIds = new Set()
+          const usedTrackIds = new Set()
+
+          let generatedPersonCounter =
+            typeof existing.nextPersonId === 'number' && existing.nextPersonId > 0
+              ? existing.nextPersonId
+              : 1
+          let generatedRoleCounter =
+            typeof existing.nextRoleId === 'number' && existing.nextRoleId > 0
+              ? existing.nextRoleId
+              : 1
+          let generatedTrackCounter =
+            typeof existing.nextTrackId === 'number' && existing.nextTrackId > 0
+              ? existing.nextTrackId
+              : 1
+
+          function allocatePersonId(preferredId) {
+            let id = preferredId && preferredId.trim().length ? preferredId.trim() : null
+            if (id && usedPersonIds.has(id)) {
+              id = null
+            }
+            if (!id) {
+              while (true) {
+                const candidate = 'p-' + generatedPersonCounter++
+                if (!usedPersonIds.has(candidate)) {
+                  id = candidate
+                  break
+                }
+              }
+            }
+            usedPersonIds.add(id)
+            return id
+          }
+
+          function allocateRoleId(preferredId) {
+            let id = preferredId && preferredId.trim().length ? preferredId.trim() : null
+            if (id && usedRoleIds.has(id)) {
+              id = null
+            }
+            if (!id) {
+              while (true) {
+                const candidate = 'role-' + generatedRoleCounter++
+                if (!usedRoleIds.has(candidate)) {
+                  id = candidate
+                  break
+                }
+              }
+            }
+            usedRoleIds.add(id)
+            return id
+          }
+
+          function allocateTrackId(preferredId, type, name) {
+            let id = preferredId && preferredId.trim().length ? preferredId.trim() : null
+            if (type === 'on_deck') {
+              id = 'on_deck'
+            } else if (type === 'out_of_office') {
+              id = 'out_of_office'
+            }
+            if (id && usedTrackIds.has(id)) {
+              id = null
+            }
+            if (!id) {
+              while (true) {
+                const candidate = 'track-' + generatedTrackCounter++
+                if (!usedTrackIds.has(candidate)) {
+                  id = candidate
+                  break
+                }
+              }
+            }
+            usedTrackIds.add(id)
+            return id
+          }
+
+          function ensurePerson(entry) {
+            if (!entry) return null
+            const name = typeof entry.name === 'string' ? entry.name.trim() : ''
+            const tokens = entry.tokens || {}
+            const preferredId =
+              tokens.id && typeof tokens.id === 'string' ? tokens.id.trim() : null
+            const id = allocatePersonId(preferredId)
+            let person = personMap.get(id)
+            if (!person) {
+              person = {
+                id,
+                name: name || id,
+              }
+              personMap.set(id, person)
+            } else if (name) {
+              person.name = name
+            }
+            return { id, tokens, person }
+          }
+
+          function ensureRole(entry) {
+            if (!entry) return null
+            const name = typeof entry.name === 'string' ? entry.name.trim() : ''
+            const tokens = entry.tokens || {}
+            const preferredId =
+              tokens.id && typeof tokens.id === 'string' ? tokens.id.trim() : null
+            const id = allocateRoleId(preferredId)
+            let role = roleMap.get(id)
+            if (!role) {
+              role = {
+                id,
+                name: name || id,
+                color: null,
+              }
+              roleMap.set(id, role)
+            } else if (name) {
+              role.name = name
+            }
+            if (typeof tokens.color === 'string' && tokens.color.trim().length) {
+              role.color = tokens.color.trim()
+            }
+            return { id, role }
+          }
+
+          function determineTrackType(name, tokens) {
+            const explicit =
+              tokens && typeof tokens.type === 'string'
+                ? tokens.type.trim().toLowerCase()
+                : ''
+            if (explicit === 'normal' || explicit === 'on_deck' || explicit === 'out_of_office') {
+              return explicit
+            }
+            const tokenId =
+              tokens && typeof tokens.id === 'string' ? tokens.id.trim().toLowerCase() : ''
+            if (tokenId === 'on_deck') return 'on_deck'
+            if (tokenId === 'out_of_office') return 'out_of_office'
+            const normalized = name.trim().toLowerCase()
+            if (normalized === 'on deck') return 'on_deck'
+            if (normalized === 'out of office') return 'out_of_office'
+            return 'normal'
+          }
+
+          const globalConfigInput = {}
+          const metaSoftRaw = meta.tenure_soft ?? meta['tenure-soft']
+          const metaHardRaw = meta.tenure_hard ?? meta['tenure-hard']
+          const metaSoftNumber = Number(metaSoftRaw)
+          const metaHardNumber = Number(metaHardRaw)
+          if (Number.isFinite(metaSoftNumber) && metaSoftNumber > 0) {
+            globalConfigInput.softDays = metaSoftNumber
+          }
+          if (Number.isFinite(metaHardNumber) && metaHardNumber > 0) {
+            globalConfigInput.hardDays = metaHardNumber
+          }
+          newState.tenure.config = normalizeTenureThresholds(globalConfigInput)
+
+          const defaultCapacityRaw =
+            meta.default_capacity ??
+            meta['default-capacity'] ??
+            meta.capacity_default ??
+            meta['capacity-default']
+          const parsedDefaultCapacity = Number(defaultCapacityRaw)
+          if (Number.isFinite(parsedDefaultCapacity) && parsedDefaultCapacity >= 1) {
+            newState.defaultTrackCapacity = parsedDefaultCapacity
+          } else if (
+            typeof existing.defaultTrackCapacity === 'number' &&
+            existing.defaultTrackCapacity >= 1
+          ) {
+            newState.defaultTrackCapacity = existing.defaultTrackCapacity
+          } else {
+            newState.defaultTrackCapacity = 2
+          }
+
+          for (const trackEntry of tracksInput) {
+            const name =
+              typeof trackEntry.name === 'string' && trackEntry.name.trim().length
+                ? trackEntry.name.trim()
+                : 'Untitled Track'
+            const tokens = trackEntry.tokens || {}
+            const type = determineTrackType(name, tokens)
+            const preferredId =
+              tokens.id && typeof tokens.id === 'string' ? tokens.id.trim() : null
+            const trackId = allocateTrackId(preferredId, type, name)
+            const track = {
+              id: trackId,
+              name,
+              type,
+              capacity: null,
+              personIds: [],
+              roleIds: [],
+              locked: false,
+            }
+
+            const capacityToken =
+              tokens.capacity != null ? String(tokens.capacity).trim().toLowerCase() : ''
+            if (type === 'normal') {
+              if (
+                !capacityToken ||
+                capacityToken === 'unbounded' ||
+                capacityToken === 'none' ||
+                capacityToken === 'null' ||
+                capacityToken === 'infinite' ||
+                capacityToken === '∞'
+              ) {
+                track.capacity = null
+              } else {
+                const capacityNumber = Number(capacityToken)
+                track.capacity =
+                  Number.isFinite(capacityNumber) && capacityNumber >= 1
+                    ? capacityNumber
+                    : newState.defaultTrackCapacity
+              }
+              if (tokens.locked === true) {
+                track.locked = true
+              } else if (typeof tokens.locked === 'string') {
+                const value = tokens.locked.trim().toLowerCase()
+                track.locked = value === 'true' || value === 'yes' || value === 'locked'
+              }
+            }
+
+            for (const personEntry of trackEntry.people || []) {
+              const ensured = ensurePerson(personEntry)
+              if (!ensured) continue
+              track.personIds.push(ensured.id)
+              if (type === 'normal') {
+                const tenureToken = ensured.tokens.tenure ?? ensured.tokens['tenure']
+                const tenureNumber = tenureToken != null ? Number(tenureToken) : NaN
+                if (Number.isFinite(tenureNumber) && tenureNumber > 0) {
+                  newState.tenure.assignments[ensured.id] = {
+                    trackId,
+                    assignedAt: tenureNumber,
+                  }
+                }
+              }
+            }
+
+            if (type === 'normal') {
+              const overrideSoftToken = tokens.tenure_soft ?? tokens['tenure-soft']
+              const overrideHardToken = tokens.tenure_hard ?? tokens['tenure-hard']
+              const overrideInput = {}
+              const overrideSoftNumber =
+                overrideSoftToken != null ? Number(overrideSoftToken) : NaN
+              const overrideHardNumber =
+                overrideHardToken != null ? Number(overrideHardToken) : NaN
+              if (Number.isFinite(overrideSoftNumber) && overrideSoftNumber > 0) {
+                overrideInput.softDays = overrideSoftNumber
+              }
+              if (Number.isFinite(overrideHardNumber) && overrideHardNumber > 0) {
+                overrideInput.hardDays = overrideHardNumber
+              }
+              if (Object.keys(overrideInput).length) {
+                const normalizedOverride = normalizeTenureOverride(
+                  overrideInput,
+                  newState.tenure.config,
+                )
+                if (normalizedOverride.softDays && normalizedOverride.hardDays) {
+                  newState.tenure.overrides[trackId] = normalizedOverride
+                }
+              }
+              for (const roleEntry of trackEntry.roles || []) {
+                const ensuredRole = ensureRole(roleEntry)
+                if (!ensuredRole) continue
+                if (!track.roleIds.includes(ensuredRole.id)) {
+                  track.roleIds.push(ensuredRole.id)
+                }
+              }
+            }
+
+            if (type === 'on_deck') {
+              onDeckTracks.push(track)
+            } else if (type === 'out_of_office') {
+              outOfOfficeTracks.push(track)
+            } else {
+              normalTracks.push(track)
+            }
+          }
+
+          if (!onDeckTracks.length) {
+            const id = allocateTrackId('on_deck', 'on_deck', 'On Deck')
+            onDeckTracks.push({
+              id,
+              name: 'On Deck',
+              type: 'on_deck',
+              capacity: null,
+              personIds: [],
+              roleIds: [],
+              locked: false,
+            })
+          }
+          if (!outOfOfficeTracks.length) {
+            const id = allocateTrackId('out_of_office', 'out_of_office', 'Out of Office')
+            outOfOfficeTracks.push({
+              id,
+              name: 'Out of Office',
+              type: 'out_of_office',
+              capacity: null,
+              personIds: [],
+              roleIds: [],
+              locked: false,
+            })
+          }
+          if (!normalTracks.length) {
+            const id = allocateTrackId(null, 'normal', 'Track A')
+            normalTracks.push({
+              id,
+              name: 'Track A',
+              type: 'normal',
+              capacity: newState.defaultTrackCapacity,
+              personIds: [],
+              roleIds: [],
+              locked: false,
+            })
+          }
+
+          newState.tracks = [...onDeckTracks, ...outOfOfficeTracks, ...normalTracks]
+          newState.people = Array.from(personMap.values())
+          newState.roles = Array.from(roleMap.values())
+
+          const validPersonIds = new Set(newState.people.map((person) => person.id))
+          const normalTrackIds = new Set(normalTracks.map((track) => track.id))
+          Object.keys(newState.tenure.assignments).forEach((personId) => {
+            const info = newState.tenure.assignments[personId]
+            if (!info || !validPersonIds.has(personId) || !normalTrackIds.has(info.trackId)) {
+              delete newState.tenure.assignments[personId]
+            }
+          })
+          Object.keys(newState.tenure.overrides).forEach((trackId) => {
+            if (!normalTrackIds.has(trackId)) {
+              delete newState.tenure.overrides[trackId]
+            }
+          })
+
+          let maxPersonNumber = 0
+          for (const person of newState.people) {
+            const match = /^p-(\d+)$/.exec(person.id)
+            if (match) {
+              const value = Number(match[1])
+              if (value > maxPersonNumber) {
+                maxPersonNumber = value
+              }
+            }
+          }
+          let maxRoleNumber = 0
+          for (const role of newState.roles) {
+            const match = /^role-(\d+)$/.exec(role.id)
+            if (match) {
+              const value = Number(match[1])
+              if (value > maxRoleNumber) {
+                maxRoleNumber = value
+              }
+            }
+          }
+          let maxTrackNumber = 0
+          for (const track of newState.tracks) {
+            const match = /^track-(\d+)$/.exec(track.id)
+            if (match) {
+              const value = Number(match[1])
+              if (value > maxTrackNumber) {
+                maxTrackNumber = value
+              }
+            }
+          }
+
+          const existingNextPerson =
+            typeof existing.nextPersonId === 'number' && existing.nextPersonId > 0
+              ? existing.nextPersonId
+              : 1
+          const existingNextRole =
+            typeof existing.nextRoleId === 'number' && existing.nextRoleId > 0
+              ? existing.nextRoleId
+              : 1
+          const existingNextTrack =
+            typeof existing.nextTrackId === 'number' && existing.nextTrackId > 0
+              ? existing.nextTrackId
+              : 1
+
+          newState.nextPersonId = Math.max(
+            existingNextPerson,
+            generatedPersonCounter,
+            maxPersonNumber + 1,
+            1,
+          )
+          newState.nextRoleId = Math.max(
+            existingNextRole,
+            generatedRoleCounter,
+            maxRoleNumber + 1,
+            1,
+          )
+          newState.nextTrackId = Math.max(
+            existingNextTrack,
+            generatedTrackCounter,
+            maxTrackNumber + 1,
+            1,
+          )
+
+          return newState
+        }
+
         function buildTrackAssignments(snapshot) {
           const assignments = new Map()
           snapshot.tracks.forEach((track) => {
@@ -1833,6 +2515,127 @@
             pendingRetirePersonId = null
             return true
           })
+        }
+
+        async function exportBoardToClipboard() {
+          const markdown = serializePlannerStateToMarkdown()
+          const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
+          const fileName = `mobbist-board-${timestamp}.md`
+          const clipboard = typeof navigator !== 'undefined' ? navigator.clipboard : null
+          if (clipboard && typeof clipboard.writeText === 'function') {
+            try {
+              await clipboard.writeText(markdown)
+              alert('Board copied to clipboard as Markdown.')
+              return
+            } catch (error) {
+              console.warn('Clipboard write failed; falling back to download.', error)
+            }
+          }
+          try {
+            const blob = new Blob([markdown], { type: 'text/markdown' })
+            const url = URL.createObjectURL(blob)
+            const link = document.createElement('a')
+            link.href = url
+            link.download = fileName
+            document.body.appendChild(link)
+            link.click()
+            document.body.removeChild(link)
+            URL.revokeObjectURL(url)
+            alert('Clipboard unavailable. Downloaded Markdown file instead.')
+          } catch (downloadError) {
+            console.error('Failed to export board markdown.', downloadError)
+            alert('Failed to export board Markdown. See console for details.')
+          }
+        }
+
+        function applyImportedBoardState(parsed) {
+          if (!parsed || !parsed.state) {
+            alert('Import failed: No board data provided.')
+            return false
+          }
+          const description = 'Import board from Markdown'
+          const applied = mutateState(description, () => {
+            applyStateSnapshot(parsed.state)
+            return true
+          })
+          if (applied === false) {
+            alert('Import skipped: board unchanged.')
+            return false
+          }
+          const exportedAt = parsed.meta && parsed.meta.exportedAt ? parsed.meta.exportedAt : null
+          if (exportedAt) {
+            alert(`Board imported from Markdown snapshot created ${exportedAt}.`)
+          } else {
+            alert('Board imported from Markdown.')
+          }
+          return true
+        }
+
+        function handleBoardImportText(rawText) {
+          const text = (rawText || '').trim()
+          if (!text) {
+            alert('Import cancelled: no Markdown provided.')
+            return
+          }
+          let parsed
+          try {
+            parsed = parsePlannerMarkdown(text, { existingState: state })
+          } catch (error) {
+            console.error('Failed to parse board markdown.', error)
+            alert(`Import failed: ${error.message || error}`)
+            return
+          }
+          const confirmMessage =
+            'Importing will replace the current board with the clipboard snapshot. Continue?'
+          if (!window.confirm(confirmMessage)) {
+            return
+          }
+          applyImportedBoardState(parsed)
+        }
+
+        async function importBoardFromClipboard() {
+          let text = ''
+          const clipboard = typeof navigator !== 'undefined' ? navigator.clipboard : null
+          if (clipboard && typeof clipboard.readText === 'function') {
+            try {
+              text = await clipboard.readText()
+            } catch (error) {
+              console.warn('Clipboard read failed; falling back to manual paste.', error)
+            }
+          }
+          if (!text || !text.trim()) {
+            text = window.prompt('Paste board Markdown to import:') || ''
+          }
+          handleBoardImportText(text)
+        }
+
+        function handlePlannerPaste(event) {
+          if (!event || !event.clipboardData) return
+          const target = event.target
+          if (
+            target &&
+            (target.isContentEditable ||
+              (target.tagName &&
+                (target.tagName.toLowerCase() === 'input' || target.tagName.toLowerCase() === 'textarea')))
+          ) {
+            return
+          }
+          const text = event.clipboardData.getData('text/plain')
+          if (!text || !text.trim()) return
+          let parsed
+          try {
+            parsed = parsePlannerMarkdown(text, { existingState: state })
+          } catch (error) {
+            return
+          }
+          const confirmMessage =
+            'Import board state from clipboard? This replaces the current board.'
+          if (!window.confirm(confirmMessage)) {
+            return
+          }
+          event.preventDefault()
+          event.stopPropagation()
+          applyImportedBoardState(parsed)
         }
 
         function quickAddCapacityTrack(extraSlots) {
@@ -3632,6 +4435,7 @@
             document.addEventListener('keydown', handleHistoryShortcut)
             document.addEventListener('dragover', onGlobalDragOver, true)
             document.addEventListener('drop', onGlobalDrop, true)
+            document.addEventListener('paste', handlePlannerPaste)
             historyShortcutBound = true
           }
 
@@ -3643,6 +4447,20 @@
           const resetPlanButton = document.getElementById('resetPlanButton')
           if (resetPlanButton) {
             resetPlanButton.addEventListener('click', resetPlan)
+          }
+
+          const exportClipboardButton = document.getElementById('exportClipboardButton')
+          if (exportClipboardButton) {
+            exportClipboardButton.addEventListener('click', () => {
+              exportBoardToClipboard()
+            })
+          }
+
+          const importClipboardButton = document.getElementById('importClipboardButton')
+          if (importClipboardButton) {
+            importClipboardButton.addEventListener('click', () => {
+              importBoardFromClipboard()
+            })
           }
 
           const addRoleButton = document.getElementById('addRoleButton')
