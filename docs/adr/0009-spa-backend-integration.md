@@ -24,7 +24,7 @@ Specifically:
 
 - When a backend is configured and reachable, the SPA loads data from the backend and replaces local state.
 - Local storage is treated as a cache and offline fallback, not as a peer source of truth.
-- When the backend is not reachable, the SPA operates entirely from local storage.
+- When a backend is configured and not reachable, remote operations fail fast; the SPA does **not** fall back to local unless the user explicitly chooses “Revert to Local.”
 - No hybrid merge or background synchronization is implemented.
 - All backend interactions are explicit or lifecycle-triggered.
 - Conflicts are resolved using last-write-wins semantics.
@@ -39,9 +39,9 @@ A backend is considered configured if a backend URL is present in persisted fron
 On application startup, the SPA calls `GET /capabilities`:
 
 - If the request succeeds, the backend is considered reachable and strict backend-authoritative mode is active.
-- If it fails, the backend is considered unreachable and the SPA runs in local fallback mode.
+- If it fails, the backend remains configured but is marked unreachable; operations fail fast until the user either retries or explicitly “Revert to Local.”
 
-Reachability may change during runtime; the SPA adapts dynamically.
+Reachability may change during runtime; the SPA adapts dynamically without automatically entering local mode.
 
 ## Load Behavior
 
@@ -62,11 +62,11 @@ To avoid silent data loss:
 
 ### Local Fallback Mode
 
-When the backend is not reachable:
+When the backend is not reachable **and remains configured**:
 
-- The SPA loads and operates entirely from local storage.
-- A visible indicator communicates that the app is operating in offline/local fallback mode.
-- Backend-dependent features are disabled.
+- Remote operations fail fast; the SPA stays in backend-authoritative mode.
+- A visible indicator communicates unreachable state; backend-dependent features remain disabled until connectivity returns.
+- The user may choose “Revert to Local” to enter local-only mode; no automatic fallback occurs.
 
 ## Save Behavior
 
@@ -93,9 +93,7 @@ Saving follows last-write-wins semantics.
 - `POST /workspaces` body `{ clientTempId: string, name: string, data: <planner-json> }`
   - 201 returns `{ id: string /*SQID*/, name: string, data: <planner-json>, updatedAt: string }`.
   - `clientTempId` is idempotent to prevent duplicates.
-- `POST /workspaces/:id/share`
-  - 200 returns `{ shareUrl: string, expiresAt?: string }`.
-  - Share URLs are bearer links; no auth required.
+- `POST /workspaces/:id/share` — removed (see Save & Share); backend tokens/links are out of scope.
 
 Errors: non-2xx responses surface as failure states; the UI falls back to local mode when capability check or workspace load fails.
 
