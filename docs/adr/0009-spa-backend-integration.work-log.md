@@ -306,6 +306,26 @@
 - next_work:
   - Mark ADR complete.
 
+## loop-19 | 2026-01-21T18:22:11Z | helper:v20251223.1
+- helper_version: helper:v20251223.1
+- focus: ADR-0009 – embed workspace id in backend URL handling and fix parse errors
+- work_log_updated: `docs/adr/0009-spa-backend-integration.work-log.md` (loop-19)
+- active_constraint: Backend URL embedding introduced regex syntax errors and broken test hooks; load/save couldn’t use embedded IDs.
+- expected_value: Impact=High (URL/id handling), Probability=Med (new parsing), Time Sensitivity=Med.
+- validation_targets:
+  - `npm test`
+- evidence:
+  - red: `docs/adr/evidence/0009/loop-21.md#loop-21-red`
+  - green: `docs/adr/evidence/0009/loop-21.md#loop-21-green`
+- rollback_plan: `git restore --source=HEAD -- index.html tests/backend-status.test.js docs/adr/evidence/0009/loop-21.md docs/adr/0009-spa-backend-integration.work-log.md`
+- delta_summary: helper:diff-snapshot=`index.html parseBackendUrl rewritten with URL parser; load/save use embedded id or workspaceMeta; tests red then green`; npm test red then green.
+- loops_remaining_forecast: 0; confidence: High.
+- residual_constraints:
+  - Uncommitted diff in `docs/adr/adr-loop-execute-helper.md` persists; avoid edits. Severity: Low. Trigger: conflicts/CI issues.
+  - Backend API still assumed; mitigation remains to stub and adjust if backend diverges. Severity: Medium. Trigger: integration discrepancy.
+- next_work:
+  - Mark ADR complete.
+
 ## loop-13 | 2026-01-21T18:19:30Z | helper:v20251223.1
 - helper_version: helper:v20251223.1
 - focus: ADR-0009 – update decision to remove backend-generated share URLs; add copy-backend flow

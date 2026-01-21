@@ -876,6 +876,7 @@
         const CONFIG_STORAGE_KEY = 'mobbist:config:v1'
         const WORKSPACE_META_KEY = 'mobbist:workspace-meta:v1'
         const BACKEND_CHECK_TIMEOUT_MS = 4000
+        const WORKSPACE_HASH_PREFIX = '#/workspace/'
         const NEW_TRACK_OPTION_VALUE = '__create_new_track__'
         const HISTORY_LIMIT = 30
         const DEFAULT_TENURE_SOFT_DAYS = 2
@@ -915,6 +916,31 @@
             reachability: 'unknown',
             lastCheckedAt: null,
           }
+        }
+
+        /** @returns {{ baseUrl: string, workspaceId: string | null }} */
+        function parseBackendUrl(url) {
+          const normalized = normalizeBackendUrl(url)
+          if (!normalized) return { baseUrl: '', workspaceId: null }
+          try {
+            const parsed = new URL(normalized)
+            const segments = parsed.pathname.split('/').filter(Boolean)
+            let workspaceId = null
+            if (segments.length >= 2 && segments[segments.length - 2] === 'workspaces') {
+              workspaceId = segments.pop()
+              segments.pop()
+            }
+            const basePath = segments.length ? `/${segments.join('/')}` : ''
+            return { baseUrl: `${parsed.origin}${basePath}`, workspaceId }
+          } catch (e) {
+            return { baseUrl: '', workspaceId: null }
+          }
+        }
+
+        function buildWorkspaceUrl(baseUrl, workspaceId) {
+          if (!baseUrl || !workspaceId) return ''
+          const trimmedBase = baseUrl.replace(/\/+$/, '')
+          return `${trimmedBase}/workspaces/${workspaceId}`
         }
 
         /** @returns {BackendConfig} */
@@ -1015,13 +1041,24 @@
           }
         }
 
+        function currentBackendBaseUrl() {
+          const parsed = parseBackendUrl(backendConfig.backendUrl)
+          return parsed.baseUrl
+        }
+
+        function currentWorkspaceId() {
+          const parsed = parseBackendUrl(backendConfig.backendUrl)
+          return parsed.workspaceId || workspaceMeta.workspaceId || null
+        }
+
         function isBackendEnabled() {
-          return backendConfig.backendUrl && backendConfig.reachability === 'connected'
+          const baseUrl = currentBackendBaseUrl()
+          return baseUrl && backendConfig.reachability === 'connected'
         }
 
         async function checkBackendReachability() {
-          const normalizedUrl = normalizeBackendUrl(backendConfig.backendUrl)
-          if (!normalizedUrl) {
+          const { baseUrl, workspaceId } = parseBackendUrl(backendConfig.backendUrl)
+          if (!baseUrl) {
             backendConfig.reachability = 'offline'
             backendConfig.lastCheckedAt = Date.now()
             saveBackendConfig(backendConfig)
@@ -1032,7 +1069,7 @@
           const controller = new AbortController()
           const timeoutId = window.setTimeout(() => controller.abort(), BACKEND_CHECK_TIMEOUT_MS)
           try {
-            const response = await fetch(`${normalizedUrl}/capabilities`, {
+            const response = await fetch(`${baseUrl}/capabilities`, {
               method: 'GET',
               headers: { Accept: 'application/json' },
               signal: controller.signal,
@@ -1046,16 +1083,68 @@
             saveBackendConfig(backendConfig)
             updateBackendStatusBadge(backendConfig.reachability)
           }
+          // Update hash if we have a workspaceId
+          if (backendConfig.reachability === 'connected' && workspaceId) {
+            window.location.hash = `${WORKSPACE_HASH_PREFIX}${workspaceId}`
+          }
           return backendConfig.reachability
         }
 
+        async function ensureWorkspaceId(baseUrl) {
+          if (workspaceMeta.workspaceId) return workspaceMeta.workspaceId
+          try {
+            const response = await fetch(`${baseUrl}/workspaces`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+              body: JSON.stringify({ clientTempId: workspaceMeta.clientTempId, name: 'Workspace', data: state }),
+            })
+            if (!response.ok) {
+              console.warn('Workspace create failed', response.status)
+              backendConfig.reachability = 'offline'
+              saveBackendConfig(backendConfig)
+              updateBackendStatusBadge(backendConfig.reachability, 'Backend create failed; staying local.')
+              disableBackendButtons(true)
+              return null
+            }
+            const data = await response.json()
+            if (!data || !data.id) {
+              console.warn('Workspace create returned invalid payload')
+              backendConfig.reachability = 'offline'
+              saveBackendConfig(backendConfig)
+              updateBackendStatusBadge(backendConfig.reachability, 'Backend create invalid; staying local.')
+              disableBackendButtons(true)
+              return null
+            }
+            workspaceMeta.workspaceId = data.id
+            workspaceMeta.persisted = true
+            saveWorkspaceMeta(workspaceMeta)
+            backendConfig.backendUrl = buildWorkspaceUrl(baseUrl, data.id)
+            saveBackendConfig(backendConfig)
+            window.location.hash = `${WORKSPACE_HASH_PREFIX}${data.id}`
+            const backendUrlInput = document.getElementById('backendUrlInput')
+            if (backendUrlInput) backendUrlInput.value = backendConfig.backendUrl
+            return data.id
+          } catch (err) {
+            console.warn('Workspace create error', err)
+            backendConfig.reachability = 'offline'
+            saveBackendConfig(backendConfig)
+            updateBackendStatusBadge(backendConfig.reachability, 'Backend create error; staying local.')
+            disableBackendButtons(true)
+            return null
+          }
+        }
+
         async function loadFromBackend() {
-          if (!isBackendEnabled() || !workspaceMeta.workspaceId) return false
+          if (!isBackendEnabled()) return false
+          const workspaceId = currentWorkspaceId()
+          if (!workspaceId) return false
           if (dirtySinceServerLoad) {
             const confirmed = window.confirm('Reloading from server will discard local changes.')
             if (!confirmed) return false
           }
-          const url = `${backendConfig.backendUrl}/workspaces/${workspaceMeta.workspaceId}`
+          const baseUrl = currentBackendBaseUrl()
+          if (!baseUrl) return false
+          const url = `${baseUrl}/workspaces/${workspaceId}`
           try {
             const response = await fetch(url, {
               method: 'GET',
@@ -1095,11 +1184,12 @@
 
         async function saveToBackend() {
           if (!isBackendEnabled()) return false
-          const snapshot = { id: workspaceMeta.workspaceId, name: 'Workspace', data: state }
-          const method = workspaceMeta.workspaceId ? 'PUT' : 'POST'
-          const url = workspaceMeta.workspaceId
-            ? `${backendConfig.backendUrl}/workspaces/${workspaceMeta.workspaceId}`
-            : `${backendConfig.backendUrl}/workspaces`
+          const workspaceId = currentWorkspaceId()
+          const snapshot = { id: workspaceId, name: 'Workspace', data: state }
+          const method = workspaceId ? 'PUT' : 'POST'
+          const baseUrl = currentBackendBaseUrl()
+          if (!baseUrl) return false
+          const url = workspaceId ? `${baseUrl}/workspaces/${workspaceId}` : `${baseUrl}/workspaces`
           try {
             const response = await fetch(url, {
               method,
@@ -1123,6 +1213,10 @@
               workspaceMeta.workspaceId = data.id
               workspaceMeta.persisted = true
               saveWorkspaceMeta(workspaceMeta)
+              backendConfig.backendUrl = buildWorkspaceUrl(baseUrl, data.id)
+              saveBackendConfig(backendConfig)
+              if (backendUrlInput) backendUrlInput.value = backendConfig.backendUrl
+              window.location.hash = `${WORKSPACE_HASH_PREFIX}${data.id}`
             }
             dirtySinceServerLoad = false
             return true
@@ -5056,6 +5150,21 @@
           const saveBackendButton = document.getElementById('saveBackendButton')
           const revertToLocalButton = document.getElementById('revertToLocalButton')
           const copyBackendUrlButton = document.getElementById('copyBackendUrlButton')
+          const retryBackendButton = document.getElementById('retryBackendButton')
+
+          // hydrate from hash if present
+          if (window.location.hash && window.location.hash.startsWith(WORKSPACE_HASH_PREFIX)) {
+            const hashId = window.location.hash.slice(WORKSPACE_HASH_PREFIX.length)
+            if (hashId) {
+              workspaceMeta.workspaceId = hashId
+              saveWorkspaceMeta(workspaceMeta)
+              const parsed = parseBackendUrl(backendConfig.backendUrl)
+              if (parsed.baseUrl && !parsed.workspaceId) {
+                backendConfig.backendUrl = buildWorkspaceUrl(parsed.baseUrl, hashId)
+                saveBackendConfig(backendConfig)
+              }
+            }
+          }
 
           if (backendUrlInput) {
             backendUrlInput.value = backendConfig.backendUrl || ''
@@ -5070,7 +5179,22 @@
               const nextUrl = backendUrlInput ? backendUrlInput.value : ''
               backendConfig.backendUrl = normalizeBackendUrl(nextUrl)
               saveBackendConfig(backendConfig)
-              await checkBackendReachability()
+              const reach = await checkBackendReachability()
+              if (reach === 'connected') {
+                const { baseUrl, workspaceId } = parseBackendUrl(backendConfig.backendUrl)
+                const ensuredId = workspaceId || (baseUrl ? await ensureWorkspaceId(baseUrl) : null)
+                if (ensuredId) {
+                  backendConfig.backendUrl = buildWorkspaceUrl(baseUrl, ensuredId)
+                  saveBackendConfig(backendConfig)
+                  if (backendUrlInput) backendUrlInput.value = backendConfig.backendUrl
+                  window.location.hash = `${WORKSPACE_HASH_PREFIX}${ensuredId}`
+                  disableBackendButtons(false)
+                  showToast('Backend connected.')
+                }
+              } else {
+                disableBackendButtons(true)
+                showToast('Backend unreachable; staying local.')
+              }
             })
           }
 
