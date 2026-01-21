@@ -137,6 +137,53 @@ describe('ADR-0009 backend status', () => {
     expect(fetchMock).toHaveBeenCalled()
     expect(hooks.backendConfig.reachability).toBe('offline')
   })
+
+  it('sends PUT with name/data when workspaceId exists', async () => {
+    const hooks = await waitForHooks(dom.window)
+    const fetchMock = dom.window._fetchMock
+    hooks.backendConfig.backendUrl = 'https://api.example.com'
+    hooks.backendConfig.reachability = 'connected'
+    hooks.workspaceMeta.workspaceId = 'w1'
+
+    hooks.setState({ ...hooks.getState(), people: [{ id: 'p1', name: 'Alice' }] }, false)
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ id: 'w1', name: 'Workspace', data: hooks.getState() }),
+    })
+
+    const ok = await hooks.saveToBackend()
+    expect(ok).toBe(true)
+    const call = fetchMock.mock.calls[0]
+    expect(call[0]).toBe('https://api.example.com/workspaces/w1')
+    const body = JSON.parse(call[1].body)
+    expect(body.id).toBe('w1')
+    expect(body.data.people[0].name).toBe('Alice')
+    expect(body.name).toBe('Workspace')
+  })
+
+  it('sends POST with clientTempId and name/data when no workspaceId', async () => {
+    const hooks = await waitForHooks(dom.window)
+    const fetchMock = dom.window._fetchMock
+    hooks.backendConfig.backendUrl = 'https://api.example.com'
+    hooks.backendConfig.reachability = 'connected'
+    hooks.workspaceMeta.workspaceId = null
+    hooks.workspaceMeta.clientTempId = 'temp-xyz'
+
+    hooks.setState({ ...hooks.getState(), people: [{ id: 'p1', name: 'Bob' }] }, false)
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ id: 'sqid-1', name: 'Workspace', data: hooks.getState() }),
+    })
+
+    const ok = await hooks.saveToBackend()
+    expect(ok).toBe(true)
+    const call = fetchMock.mock.calls[0]
+    expect(call[0]).toBe('https://api.example.com/workspaces')
+    const body = JSON.parse(call[1].body)
+    expect(body.clientTempId).toBe('temp-xyz')
+    expect(body.data.people[0].name).toBe('Bob')
+    expect(body.name).toBe('Workspace')
+  })
 })
 
 function waitForHooks(window, timeoutMs = 2000) {

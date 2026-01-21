@@ -193,3 +193,21 @@
 - next_work:
   - Behaviour: Add test for POST/PUT payload shaping (name, clientTempId) and adjust implementation if needed.
   - Behaviour: Add UI/status surfacing for backend errors beyond alert (badge message/toast).
+
+## loop-11 | 2026-01-21T18:12:56Z | helper:v20251223.1
+- helper_version: helper:v20251223.1
+- focus: ADR-0009 – validate backend save payload shape (name, clientTempId) and cover failure/offline paths
+- work_log_updated: `docs/adr/0009-spa-backend-integration.work-log.md` (loop-11)
+- active_constraint: Payload contract (name/clientTempId) was unvalidated; risk of mismatched backend contract and hidden regressions.
+- expected_value: Impact=High (aligns with ADR contract), Probability=High (tests), Time Sensitivity=Med; uncertainty: low after green.
+- validation_targets:
+  - `npm test`
+- evidence: `docs/adr/evidence/0009/loop-13.md#loop-13-green`
+- rollback_plan: `git restore --source=HEAD -- tests/backend-status.test.js docs/adr/evidence/0009/loop-13.md docs/adr/0009-spa-backend-integration.work-log.md`
+- delta_summary: helper:diff-snapshot=`tests/backend-status.test.js adds POST/PUT payload expectations; implementation already passes`; npm test passes (8 tests).
+- loops_remaining_forecast: 1 loop to improve backend failure surfacing (toast/badge message); confidence: Medium.
+- residual_constraints:
+  - Uncommitted diff in `docs/adr/adr-loop-execute-helper.md` persists; avoid edits. Severity: Low. Trigger: conflicts/CI issues.
+  - Backend API still assumed; mitigation remains to stub and adjust. Severity: Medium. Trigger: divergence on integration.
+- next_work:
+  - Behaviour: Surface backend failure via badge message or toast instead of alerts; add test that failure toggles message/state.
