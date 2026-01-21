@@ -821,12 +821,12 @@
             placeholder="https://api.example.com"
             aria-label="Backend base URL"
           />
-          <button id="checkBackendButton" class="ghost">Save &amp; Check</button>
+          <button id="checkBackendButton" class="ghost">Connect &amp; Check</button>
           <button id="loadBackendButton" class="ghost">Load from Backend</button>
           <button id="saveBackendButton" class="primary">Save to Backend</button>
-          <button id="revertToLocalButton" class="danger">Revert to Local</button>
+          <button id="revertToLocalButton" class="danger">Switch to Local Only</button>
           <button id="copyBackendUrlButton" class="ghost">Copy Backend URL</button>
-          <button id="retryBackendButton" class="ghost">Retry Backend</button>
+          <button id="retryBackendButton" class="ghost">Retry Backend Connection</button>
         </div>
       </section>
 
@@ -5311,10 +5311,3 @@
     </script>
   </body>
 </html>
-        function disableBackendButtons(disable) {
-          const loadBtn = document.getElementById('loadBackendButton')
-          const saveBtn = document.getElementById('saveBackendButton')
-          if (loadBtn) loadBtn.disabled = disable
-          if (saveBtn) saveBtn.disabled = disable
-        }
-          const retryBackendButton = document.getElementById('retryBackendButton')

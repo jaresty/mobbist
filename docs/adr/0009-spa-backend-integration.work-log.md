@@ -288,6 +288,24 @@
 - next_work:
   - Mark ADR complete or further refine messaging copy if desired.
 
+## loop-18 | 2026-01-21T18:54:31Z | helper:v20251223.1
+- helper_version: helper:v20251223.1
+- focus: ADR-0009 – clarify backend button labels and remove stray code from DOM
+- work_log_updated: `docs/adr/0009-spa-backend-integration.work-log.md` (loop-18)
+- active_constraint: Backend controls had ambiguous labels and stray script text was rendered in the DOM after a prior edit.
+- expected_value: Impact=Med (usability/cleanup), Probability=High, Time Sensitivity=Low.
+- validation_targets:
+  - `npm test`
+- evidence: `docs/adr/evidence/0009/loop-20.md#loop-20-green`
+- rollback_plan: `git restore --source=HEAD -- index.html docs/adr/evidence/0009/loop-20.md docs/adr/0009-spa-backend-integration.work-log.md`
+- delta_summary: helper:diff-snapshot=`index.html cleans stray code, renames backend buttons (Connect & Check, Switch to Local Only, Retry Backend Connection), keeps retry/toast; tests still passing (8)`; npm test green.
+- loops_remaining_forecast: 0; confidence: High.
+- residual_constraints:
+  - Uncommitted diff in `docs/adr/adr-loop-execute-helper.md` persists; avoid edits. Severity: Low. Trigger: conflicts/CI issues.
+  - Backend API still assumed; mitigation remains to stub and adjust. Severity: Medium. Trigger: divergence on integration.
+- next_work:
+  - Mark ADR complete.
+
 ## loop-13 | 2026-01-21T18:19:30Z | helper:v20251223.1
 - helper_version: helper:v20251223.1
 - focus: ADR-0009 – update decision to remove backend-generated share URLs; add copy-backend flow
