@@ -1,6 +1,6 @@
 # ADR-0009: Frontend Persistence and Backend Integration Strategy
 
-- Status: Accepted (supersedes persistence strategy portions of ADR-001; ADR-001 remains for unrelated scope)
+- Status: Accepted (Complete; supersedes persistence strategy portions of ADR-001; ADR-001 remains for unrelated scope)
 - Date: 2026-01-21
 - Owners: Mobbist maintainers
 - Related:

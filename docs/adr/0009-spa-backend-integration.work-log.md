@@ -326,6 +326,23 @@
 - next_work:
   - Mark ADR complete.
 
+## loop-20 | 2026-01-21T18:55:00Z | helper:v20251223.1
+- helper_version: helper:v20251223.1
+- focus: ADR-0009 – mark ADR complete after backend URL/id embedding and UX alignment
+- work_log_updated: `docs/adr/0009-spa-backend-integration.work-log.md` (loop-20)
+- active_constraint: Completion status not yet reflected after implementing backend authoritative/no-auto-fallback and workspace-id embedding.
+- expected_value: Impact=Med (clarity), Probability=High, Time Sensitivity=Low.
+- validation_targets: none (documentation status update)
+- evidence: status updated in ADR-0009.
+- rollback_plan: `git restore --source=HEAD -- docs/adr/0009-spa-backend-integration.md docs/adr/0009-spa-backend-integration.work-log.md`
+- delta_summary: helper:diff-snapshot=`docs/adr/0009-spa-backend-integration.md status set to Accepted (Complete); work-log entry added`; documentation-only loop.
+- loops_remaining_forecast: 0; confidence: High.
+- residual_constraints:
+  - Uncommitted diff in `docs/adr/adr-loop-execute-helper.md` persists; avoid edits. Severity: Low. Trigger: conflicts/CI issues.
+  - Backend API still assumed; mitigation remains to stub and adjust if backend diverges. Severity: Medium. Trigger: integration discrepancy.
+- next_work:
+  - None; ADR-0009 considered complete.
+
 ## loop-13 | 2026-01-21T18:19:30Z | helper:v20251223.1
 - helper_version: helper:v20251223.1
 - focus: ADR-0009 – update decision to remove backend-generated share URLs; add copy-backend flow
