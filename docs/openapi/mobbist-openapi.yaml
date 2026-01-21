@@ -1,0 +1,140 @@
+openapi: 3.0.3
+info:
+  title: Mobbist Backend API
+  version: 1.0.0
+  description: Minimal backend contract for the Mobbist SPA.
+servers:
+  - url: http://localhost:8080
+paths:
+  /capabilities:
+    get:
+      summary: Get backend capabilities
+      operationId: getCapabilities
+      responses:
+        "200":
+          description: Capabilities supported by the backend
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Capabilities"
+        "default":
+          description: Unreachable or error
+  /workspaces/{id}:
+    get:
+      summary: Get a workspace by ID
+      operationId: getWorkspace
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Workspace found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Workspace"
+        "404":
+          description: Workspace not found
+        "default":
+          description: Unreachable or error
+    put:
+      summary: Overwrite a workspace by ID (last-write-wins)
+      operationId: putWorkspace
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkspaceUpsert"
+      responses:
+        "200":
+          description: Workspace saved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Workspace"
+        "default":
+          description: Unreachable or error
+  /workspaces:
+    post:
+      summary: Create a new workspace (idempotent on clientTempId)
+      operationId: createWorkspace
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkspaceCreate"
+      responses:
+        "201":
+          description: Workspace created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Workspace"
+        "default":
+          description: Unreachable or error
+components:
+  schemas:
+    Capabilities:
+      type: object
+      required: [supportsWorkspaces]
+      properties:
+        supportsWorkspaces:
+          type: boolean
+          example: true
+      additionalProperties: false
+    Workspace:
+      type: object
+      required: [id, name, data, updatedAt]
+      properties:
+        id:
+          type: string
+          description: Workspace ID (SQID)
+        name:
+          type: string
+        data:
+          $ref: "#/components/schemas/PlannerData"
+        updatedAt:
+          type: string
+          format: date-time
+      additionalProperties: false
+    WorkspaceUpsert:
+      type: object
+      required: [id, name, data]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        data:
+          $ref: "#/components/schemas/PlannerData"
+        updatedAt:
+          type: string
+          format: date-time
+      additionalProperties: false
+    WorkspaceCreate:
+      type: object
+      required: [clientTempId, name, data]
+      properties:
+        clientTempId:
+          type: string
+          description: Client-side idempotency key
+        name:
+          type: string
+        data:
+          $ref: "#/components/schemas/PlannerData"
+      additionalProperties: false
+    PlannerData:
+      type: object
+      description: Planner JSON payload (opaque to backend)
+      additionalProperties: true
