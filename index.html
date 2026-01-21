@@ -680,6 +680,69 @@
         color: var(--muted);
       }
 
+      .backend-status {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        align-items: flex-start;
+        padding: 10px 12px;
+        background: #ffffff;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
+      }
+
+      .backend-status-top {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+
+      .backend-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 10px;
+        border-radius: 999px;
+        font-size: 0.8rem;
+        font-weight: 600;
+        background: #e5e7eb;
+        color: #111827;
+      }
+
+      .backend-badge[data-status='connected'] {
+        background: rgba(16, 185, 129, 0.15);
+        color: #065f46;
+        border: 1px solid rgba(16, 185, 129, 0.4);
+      }
+
+      .backend-badge[data-status='offline'],
+      .backend-badge[data-status='unknown'] {
+        background: rgba(239, 68, 68, 0.12);
+        color: #991b1b;
+        border: 1px solid rgba(239, 68, 68, 0.35);
+      }
+
+      .backend-controls-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        width: 100%;
+      }
+
+      .backend-controls-row input[type='url'] {
+        flex: 1;
+        min-width: 220px;
+        padding: 8px;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+      }
+
+      .backend-controls-row button {
+        white-space: nowrap;
+      }
+
       .track-full {
         border-color: #f97316;
       }
@@ -717,6 +780,24 @@
           </div>
         </div>
       </div>
+
+      <section class="backend-status" aria-label="Backend status and settings">
+        <div class="backend-status-top">
+          <div id="backendStatusBadge" class="backend-badge" data-status="unknown">Local fallback</div>
+          <span class="muted" style="font-size:0.85rem;">Backend optional; falls back to local when unreachable.</span>
+        </div>
+        <div class="backend-controls-row">
+          <input
+            id="backendUrlInput"
+            type="url"
+            inputmode="url"
+            placeholder="https://api.example.com"
+            aria-label="Backend base URL"
+          />
+          <button id="checkBackendButton" class="ghost">Save &amp; Check</button>
+          <button id="revertToLocalButton" class="danger">Revert to Local</button>
+        </div>
+      </section>
 
       <section class="stack">
         <label for="bulkNamesInput" style="font-size:0.85rem;">Add people (one name per line):</label>
@@ -761,6 +842,8 @@
       ;(function () {
         const STORAGE_KEY = 'mobbist:v1'
         const LEGACY_STORAGE_KEYS = ['pairPlanner:v1']
+        const CONFIG_STORAGE_KEY = 'mobbist:config:v1'
+        const BACKEND_CHECK_TIMEOUT_MS = 4000
         const NEW_TRACK_OPTION_VALUE = '__create_new_track__'
         const HISTORY_LIMIT = 30
         const DEFAULT_TENURE_SOFT_DAYS = 2
@@ -778,7 +861,94 @@
          * @typedef {{ trackId: string, assignedAt: number }} TenureAssignment
          * @typedef {{ assignments: { [personId: string]: TenureAssignment | undefined }, overrides: { [trackId: string]: Partial<TenureThresholds> | undefined }, config: TenureThresholds }} TenureState
          * @typedef {{ people: Person[], roles: Role[], tracks: Track[], nextPersonId: number, nextTrackId: number, nextRoleId: number, defaultTrackCapacity: number, tenure: TenureState }} PlannerState
+         * @typedef {{ backendUrl: string, reachability: 'unknown' | 'connected' | 'offline', lastCheckedAt: number | null }} BackendConfig
          */
+
+        function normalizeBackendUrl(url) {
+          if (!url) return ''
+          const trimmed = String(url).trim()
+          if (!trimmed) return ''
+          const withoutTrailing = trimmed.replace(/\/+$/, '')
+          if (/^https?:\/\//i.test(withoutTrailing)) {
+            return withoutTrailing
+          }
+          return `https://${withoutTrailing}`
+        }
+
+        /** @returns {BackendConfig} */
+        function createDefaultBackendConfig() {
+          return {
+            backendUrl: '',
+            reachability: 'unknown',
+            lastCheckedAt: null,
+          }
+        }
+
+        /** @returns {BackendConfig} */
+        function loadBackendConfig() {
+          try {
+            const raw = window.localStorage.getItem(CONFIG_STORAGE_KEY)
+            if (!raw) return createDefaultBackendConfig()
+            const parsed = JSON.parse(raw)
+            const backendUrl = normalizeBackendUrl(parsed.backendUrl || '')
+            const reachability =
+              parsed.reachability === 'connected' || parsed.reachability === 'offline'
+                ? parsed.reachability
+                : 'unknown'
+            const lastCheckedAt = typeof parsed.lastCheckedAt === 'number' ? parsed.lastCheckedAt : null
+            return { backendUrl, reachability, lastCheckedAt }
+          } catch (e) {
+            console.warn('Failed to load backend config, resetting.', e)
+            return createDefaultBackendConfig()
+          }
+        }
+
+        /** @param {BackendConfig} config */
+        function saveBackendConfig(config) {
+          try {
+            window.localStorage.setItem(CONFIG_STORAGE_KEY, JSON.stringify(config))
+          } catch (e) {
+            console.warn('Failed to save backend config.', e)
+          }
+        }
+
+        /** @param {'unknown' | 'connected' | 'offline'} status */
+        function updateBackendStatusBadge(status) {
+          const badge = document.getElementById('backendStatusBadge')
+          if (!badge) return
+          badge.textContent = status === 'connected' ? 'Backend connected' : 'Local fallback'
+          badge.dataset.status = status
+        }
+
+        async function checkBackendReachability() {
+          const normalizedUrl = normalizeBackendUrl(backendConfig.backendUrl)
+          if (!normalizedUrl) {
+            backendConfig.reachability = 'offline'
+            backendConfig.lastCheckedAt = Date.now()
+            saveBackendConfig(backendConfig)
+            updateBackendStatusBadge(backendConfig.reachability)
+            return backendConfig.reachability
+          }
+
+          const controller = new AbortController()
+          const timeoutId = window.setTimeout(() => controller.abort(), BACKEND_CHECK_TIMEOUT_MS)
+          try {
+            const response = await fetch(`${normalizedUrl}/capabilities`, {
+              method: 'GET',
+              headers: { Accept: 'application/json' },
+              signal: controller.signal,
+            })
+            backendConfig.reachability = response.ok ? 'connected' : 'offline'
+          } catch (err) {
+            backendConfig.reachability = 'offline'
+          } finally {
+            window.clearTimeout(timeoutId)
+            backendConfig.lastCheckedAt = Date.now()
+            saveBackendConfig(backendConfig)
+            updateBackendStatusBadge(backendConfig.reachability)
+          }
+          return backendConfig.reachability
+        }
  
  
          function formatClipboardTokens(entries) {
@@ -1155,6 +1325,8 @@
 
         /** @type {PlannerState} */
         let state
+        /** @type {BackendConfig} */
+        let backendConfig = loadBackendConfig()
         let currentDragPersonId = null
         let currentDragPersonEl = null
         let currentDragRoleId = null
@@ -4650,10 +4822,64 @@
           flushHistoryAnnouncement()
         }
 
+        if (typeof window !== 'undefined') {
+          window.__mobbistTestHooks = {
+            checkBackendReachability,
+            updateBackendStatusBadge,
+            backendConfig,
+            normalizeBackendUrl,
+            loadBackendConfig,
+            saveBackendConfig,
+          }
+        }
+
         function init() {
           state = loadState()
+          updateBackendStatusBadge(backendConfig.reachability)
 
           historyAnnouncerEl = document.getElementById('historyAnnouncer')
+
+          const backendUrlInput = document.getElementById('backendUrlInput')
+          const checkBackendButton = document.getElementById('checkBackendButton')
+          const revertToLocalButton = document.getElementById('revertToLocalButton')
+
+          if (backendUrlInput) {
+            backendUrlInput.value = backendConfig.backendUrl || ''
+            backendUrlInput.addEventListener('blur', () => {
+              backendUrlInput.value = normalizeBackendUrl(backendUrlInput.value)
+            })
+          }
+
+          if (checkBackendButton) {
+            checkBackendButton.addEventListener('click', async (ev) => {
+              ev.preventDefault()
+              const nextUrl = backendUrlInput ? backendUrlInput.value : ''
+              backendConfig.backendUrl = normalizeBackendUrl(nextUrl)
+              saveBackendConfig(backendConfig)
+              await checkBackendReachability()
+            })
+          }
+
+          if (revertToLocalButton) {
+            revertToLocalButton.addEventListener('click', (ev) => {
+              ev.preventDefault()
+              const confirmReset = window.confirm(
+                'Revert to local will disable backend usage and keep your current local state. Continue?',
+              )
+              if (!confirmReset) return
+              backendConfig = createDefaultBackendConfig()
+              saveBackendConfig(backendConfig)
+              if (backendUrlInput) backendUrlInput.value = ''
+              updateBackendStatusBadge(backendConfig.reachability)
+              alert('Backend disabled. Running in local-only mode.')
+            })
+          }
+
+          if (backendConfig.backendUrl) {
+            checkBackendReachability().catch((err) => {
+              console.warn('Backend check failed; staying in local mode.', err)
+            })
+          }
 
           undoButtonEl = document.getElementById('undoButton')
           if (undoButtonEl) {

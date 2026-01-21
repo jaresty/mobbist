@@ -1,0 +1,29 @@
+{
+  "name": "mobbist",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "test": "vitest run"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jaresty/mobbist.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/jaresty/mobbist/issues"
+  },
+  "homepage": "https://github.com/jaresty/mobbist#readme",
+  "devDependencies": {
+    "@testing-library/dom": "^10.4.1",
+    "jsdom": "^27.4.0",
+    "vitest": "^4.0.17"
+  }
+}
