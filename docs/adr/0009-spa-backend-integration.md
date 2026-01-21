@@ -111,15 +111,12 @@ To avoid duplicate workspace creation:
 - `POST /workspaces` includes a `clientTempId`.
 - The backend treats `clientTempId` idempotently.
 
-## Save & Share URLs
+## Save & Share
 
 - Markdown import/export remains unchanged and always available.
-- When a backend is configured, the SPA provides a Save & Share flow:
-  - Ensure the workspace is persisted to the backend.
-  - Request a share URL from the backend.
-- Present the share URL to the user and copy it to the clipboard.
-- Share URLs use separate, unguessable share tokens and are not raw workspace identifiers.
-- Share URLs are bearer links and require no authentication.
+- Backend access is user-specified; users paste or type the backend URL they intend to use.
+- No backend-generated share URLs are provided by the frontend.
+- A “Copy backend URL” control is exposed so users can quickly hand the configured backend URL to teammates (e.g., via Slack) for coordination.
 
 ## Revert to Local
 

@@ -212,6 +212,23 @@
 - next_work:
   - If required: stub/share URL flow per ADR; otherwise mark ADR behaviour set as complete.
 
+## loop-13 | 2026-01-21T18:19:30Z | helper:v20251223.1
+- helper_version: helper:v20251223.1
+- focus: ADR-0009 – update decision to remove backend-generated share URLs; add copy-backend flow
+- work_log_updated: `docs/adr/0009-spa-backend-integration.work-log.md` (loop-13)
+- active_constraint: ADR still referenced backend-generated share URLs, conflicting with product intent (users share backend URL directly).
+- expected_value: Impact=Med (aligns ADR with intended UX), Probability=High (doc edit), Time Sensitivity=Low; uncertainty: low.
+- validation_targets: (documentation-only loop) none
+- evidence: `docs/adr/0009-spa-backend-integration.md` updated; no executable artefacts touched.
+- rollback_plan: `git restore --source=HEAD -- docs/adr/0009-spa-backend-integration.md docs/adr/0009-spa-backend-integration.work-log.md`
+- delta_summary: helper:diff-snapshot=`docs/adr/0009-spa-backend-integration.md | Save & Share section now removes backend share URL flow and adds copy-backend URL guidance`; doc-only loop.
+- loops_remaining_forecast: 0–1 (cleanup/confirm completion); confidence: High.
+- residual_constraints:
+  - Uncommitted diff in `docs/adr/adr-loop-execute-helper.md` persists; avoid edits. Severity: Low. Trigger: conflicts/CI issues.
+  - Backend API still assumed; mitigation remains to stub and adjust. Severity: Medium. Trigger: divergence on integration.
+- next_work:
+  - Confirm ADR completion and, if desired, add UI control to copy backend URL (non-blocking).
+
 ## loop-11 | 2026-01-21T18:12:56Z | helper:v20251223.1
 - helper_version: helper:v20251223.1
 - focus: ADR-0009 – validate backend save payload shape (name, clientTempId) and cover failure/offline paths
