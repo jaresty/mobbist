@@ -230,6 +230,45 @@
 - next_work:
   - Optionally refine messaging/UX for failure states; otherwise mark ADR closed.
 
+## loop-15 | 2026-01-21T18:30:00Z | helper:v20251223.1
+- helper_version: helper:v20251223.1
+- focus: ADR-0009 – enforce backend-authoritative mode without auto-fallback; disable remote ops when unreachable
+- work_log_updated: `docs/adr/0009-spa-backend-integration.work-log.md` (loop-15)
+- active_constraint: UI leaves Load/Save active when backend is configured but unreachable, conflicting with the “no auto-fallback” contract.
+- expected_value: Impact=High (behaviour alignment), Probability=Med, Time Sensitivity=High; uncertainty: medium until button state and messaging updated.
+- validation_targets:
+  - `npm test` (extend to assert button disablement when reachability=offline while configured)
+- evidence: pending (will record red/green after implementation)
+- rollback_plan: `git restore --source=HEAD -- index.html tests/backend-status.test.js docs/adr/0009-spa-backend-integration.work-log.md`
+- delta_summary: planning entry for button-state/UX changes to block remote ops when unreachable.
+- loops_remaining_forecast: 1–2 loops to implement disablement/retry UX and tests.
+- residual_constraints:
+  - Uncommitted diff in `docs/adr/adr-loop-execute-helper.md` persists; avoid edits. Severity: Low. Trigger: conflicts/CI issues.
+  - Backend API still assumed; mitigation remains to stub and adjust. Severity: Medium. Trigger: divergence on integration.
+- next_work:
+  - Behaviour: Disable Load/Save when reachability=offline while configured; add Retry control; Revert retains current behaviour.
+  - Behaviour: Extend tests to cover unreachable-configured state and retry toggling.
+
+## loop-16 | 2026-01-21T18:43:13Z | helper:v20251223.1
+- helper_version: helper:v20251223.1
+- focus: ADR-0009 – disable remote ops when backend unreachable; ensure functions defined before use
+- work_log_updated: `docs/adr/0009-spa-backend-integration.work-log.md` (loop-16)
+- active_constraint: Backend unreachable state did not disable Load/Save and introduced a ReferenceError when wiring button disablement.
+- expected_value: Impact=High, Probability=Med (initial red due to hoist order), Time Sensitivity=High; uncertainty resolved after green.
+- validation_targets:
+  - `npm test`
+- evidence:
+  - red: `docs/adr/evidence/0009/loop-17.md#loop-17-red`
+  - green: `docs/adr/evidence/0009/loop-18.md#loop-18-green`
+- rollback_plan: `git restore --source=HEAD -- index.html tests/backend-status.test.js docs/adr/evidence/0009/loop-17.md docs/adr/evidence/0009/loop-18.md docs/adr/0009-spa-backend-integration.work-log.md`
+- delta_summary: helper:diff-snapshot=`index.html defines disableBackendButtons before use; load/save disabled on offline failures; tests extended to assert disabled state` ; npm test red then green.
+- loops_remaining_forecast: 0 (ADR behaviours aligned with contract); confidence: High.
+- residual_constraints:
+  - Uncommitted diff in `docs/adr/adr-loop-execute-helper.md` persists; avoid edits. Severity: Low. Trigger: conflicts/CI issues.
+  - Backend API still assumed; mitigation remains to stub and adjust. Severity: Medium. Trigger: divergence on integration.
+- next_work:
+  - Optional refinement of retry control; otherwise mark ADR complete.
+
 ## loop-13 | 2026-01-21T18:19:30Z | helper:v20251223.1
 - helper_version: helper:v20251223.1
 - focus: ADR-0009 – update decision to remove backend-generated share URLs; add copy-backend flow

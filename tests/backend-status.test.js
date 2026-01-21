@@ -119,6 +119,7 @@ describe('ADR-0009 backend status', () => {
     expect(ok).toBe(false)
     expect(fetchMock).toHaveBeenCalled()
     expect(hooks.backendConfig.reachability).toBe('offline')
+    expectLoadSaveDisabled(dom, true)
   })
 
   it('sets offline when backend save fails', async () => {
@@ -136,6 +137,7 @@ describe('ADR-0009 backend status', () => {
     expect(ok).toBe(false)
     expect(fetchMock).toHaveBeenCalled()
     expect(hooks.backendConfig.reachability).toBe('offline')
+    expectLoadSaveDisabled(dom, true)
   })
 
   it('sends PUT with name/data when workspaceId exists', async () => {
@@ -196,4 +198,11 @@ function waitForHooks(window, timeoutMs = 2000) {
     }
     check()
   })
+}
+
+function expectLoadSaveDisabled(dom, disabled) {
+  const loadBtn = dom.window.document.getElementById('loadBackendButton')
+  const saveBtn = dom.window.document.getElementById('saveBackendButton')
+  expect(loadBtn?.disabled || false).toBe(disabled)
+  expect(saveBtn?.disabled || false).toBe(disabled)
 }

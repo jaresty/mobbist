@@ -923,6 +923,13 @@
           }
         }
 
+        function disableBackendButtons(disable) {
+          const loadBtn = document.getElementById('loadBackendButton')
+          const saveBtn = document.getElementById('saveBackendButton')
+          if (loadBtn) loadBtn.disabled = disable
+          if (saveBtn) saveBtn.disabled = disable
+        }
+
         /** @param {'unknown' | 'connected' | 'offline'} status */
         function updateBackendStatusBadge(status, message) {
           const badge = document.getElementById('backendStatusBadge')
@@ -933,6 +940,7 @@
           if (msgEl) {
             msgEl.textContent = message || (status === 'connected' ? 'Using backend.' : 'Using local-only mode.')
           }
+          disableBackendButtons(status === 'offline')
         }
 
         /** @returns {WorkspaceMeta} */
@@ -1043,6 +1051,7 @@
             backendConfig.reachability = 'offline'
             saveBackendConfig(backendConfig)
             updateBackendStatusBadge(backendConfig.reachability, 'Backend load failed; using local.')
+            disableBackendButtons(true)
             return false
           }
         }
@@ -1069,6 +1078,7 @@
               backendConfig.reachability = 'offline'
               saveBackendConfig(backendConfig)
               updateBackendStatusBadge(backendConfig.reachability, 'Backend save failed; staying local.')
+              disableBackendButtons(true)
               return false
             }
             const data = await response.json()
@@ -1084,6 +1094,7 @@
             backendConfig.reachability = 'offline'
             saveBackendConfig(backendConfig)
             updateBackendStatusBadge(backendConfig.reachability, 'Backend save failed; staying local.')
+            disableBackendButtons(true)
             return false
           }
         }
@@ -5251,3 +5262,9 @@
     </script>
   </body>
 </html>
+        function disableBackendButtons(disable) {
+          const loadBtn = document.getElementById('loadBackendButton')
+          const saveBtn = document.getElementById('saveBackendButton')
+          if (loadBtn) loadBtn.disabled = disable
+          if (saveBtn) saveBtn.disabled = disable
+        }
