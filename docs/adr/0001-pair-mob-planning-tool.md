@@ -1,6 +1,6 @@
 # ADR: Pair/Mob Planning Single-Page Tool
 
-- Status: Proposed
+- Status: Proposed _(persistence strategy superseded by ADR-0009: Frontend Persistence and Backend Integration Strategy)_
 - Date: 2025-12-04
 - Owners: Docs app maintainers
 - Related:
@@ -154,4 +154,3 @@ Derived invariants:
 - Consider future enhancements:
   - Export/import JSON for sharing plans.
   - Optional URL-based encoding for shareable states.
-

@@ -18,3 +18,22 @@
 - next_work:
   - Behaviour: Implement backend reachability detection and status indicator; validate via manual workspace load/save smoke (`npx http-server` + scripted fetch mocks or equivalent).
   - Behaviour: Implement Revert to Local control and ensure local snapshot preserved; validate via localStorage snapshot check and disabled backend calls.
+
+## loop-2 | 2026-01-21T17:32:26Z | helper:v20251223.1
+- helper_version: helper:v20251223.1
+- focus: ADR-0009 – cross-reference ADR-001 to note persistence strategy superseded
+- work_log_updated: `docs/adr/0009-spa-backend-integration.work-log.md` (loop-2)
+- active_constraint: Readers of ADR-001 lack a pointer to ADR-0009 for the updated persistence strategy, risking divergence in implementation guidance.
+- expected_value: Impact=Med (reduces misalignment), Probability=High (adding cross-reference addresses it), Time Sensitivity=Low (documentation freshness) – low uncertainty.
+- validation_targets:
+  - `grep -q "ADR-0009" docs/adr/0001-pair-mob-planning-tool.md`
+- evidence: `docs/adr/evidence/0009/loop-2.md#loop-2-green`
+- rollback_plan: `git restore --source=HEAD -- docs/adr/0001-pair-mob-planning-tool.md docs/adr/evidence/0009/loop-2.md`
+- delta_summary: helper:diff-snapshot=`docs/adr/0001-pair-mob-planning-tool.md | 1 insertion(+), 2 deletions(-)`; added status note pointing ADR-001 readers to ADR-0009.
+- loops_remaining_forecast: 2–3 loops to implement backend reachability, workspace load/save flows, and Revert to Local UX; confidence: Medium.
+- residual_constraints:
+  - Uncommitted diff in `docs/adr/adr-loop-execute-helper.md` persists; avoid edits. Severity: Low. Trigger: conflicts/CI issues.
+  - Backend API still assumed; mitigation remains to stub and adjust. Severity: Medium. Trigger: divergence on integration.
+- next_work:
+  - Behaviour: Implement backend reachability detection/status indicator; validate via manual load/save against mock backend.
+  - Behaviour: Implement Revert to Local control preserving local snapshot; validate via localStorage state and absence of backend calls.
