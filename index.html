@@ -804,6 +804,7 @@
           <button id="loadBackendButton" class="ghost">Load from Backend</button>
           <button id="saveBackendButton" class="primary">Save to Backend</button>
           <button id="revertToLocalButton" class="danger">Revert to Local</button>
+          <button id="copyBackendUrlButton" class="ghost">Copy Backend URL</button>
         </div>
       </section>
 
@@ -5006,6 +5007,7 @@
           const loadBackendButton = document.getElementById('loadBackendButton')
           const saveBackendButton = document.getElementById('saveBackendButton')
           const revertToLocalButton = document.getElementById('revertToLocalButton')
+          const copyBackendUrlButton = document.getElementById('copyBackendUrlButton')
 
           if (backendUrlInput) {
             backendUrlInput.value = backendConfig.backendUrl || ''
@@ -5052,6 +5054,24 @@
               ev.preventDefault()
               const ok = await saveToBackend()
               if (!ok) alert('Failed to save to backend. Local data is still intact.')
+            })
+          }
+
+          if (copyBackendUrlButton) {
+            copyBackendUrlButton.addEventListener('click', async (ev) => {
+              ev.preventDefault()
+              const url = backendUrlInput ? backendUrlInput.value.trim() : ''
+              if (!url) {
+                alert('No backend URL set.')
+                return
+              }
+              try {
+                await navigator.clipboard.writeText(url)
+                alert('Backend URL copied to clipboard.')
+              } catch (err) {
+                console.warn('Failed to copy backend URL', err)
+                alert('Unable to copy backend URL.')
+              }
             })
           }
 

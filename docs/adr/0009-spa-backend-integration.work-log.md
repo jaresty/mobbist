@@ -212,6 +212,24 @@
 - next_work:
   - If required: stub/share URL flow per ADR; otherwise mark ADR behaviour set as complete.
 
+## loop-14 | 2026-01-21T18:23:42Z | helper:v20251223.1
+- helper_version: helper:v20251223.1
+- focus: ADR-0009 – add Copy Backend URL control to align with share decision
+- work_log_updated: `docs/adr/0009-spa-backend-integration.work-log.md` (loop-14)
+- active_constraint: ADR removed backend share URLs; UI lacked a way to quickly share the configured backend URL.
+- expected_value: Impact=Med (usability alignment), Probability=High (simple control), Time Sensitivity=Low.
+- validation_targets:
+  - `npm test`
+- evidence: `docs/adr/evidence/0009/loop-15.md#loop-15-green`
+- rollback_plan: `git restore --source=HEAD -- index.html docs/adr/evidence/0009/loop-15.md docs/adr/0009-spa-backend-integration.work-log.md`
+- delta_summary: helper:diff-snapshot=`index.html adds copy backend URL button and status message remains; tests unchanged (8 passing)`.
+- loops_remaining_forecast: 0 (ADR behaviours implemented and validated); confidence: High.
+- residual_constraints:
+  - Uncommitted diff in `docs/adr/adr-loop-execute-helper.md` persists; avoid edits. Severity: Low. Trigger: conflicts/CI issues.
+  - Backend API still assumed; mitigation remains to stub and adjust if backend diverges. Severity: Medium. Trigger: integration discrepancy.
+- next_work:
+  - Optionally refine messaging/UX for failure states; otherwise mark ADR closed.
+
 ## loop-13 | 2026-01-21T18:19:30Z | helper:v20251223.1
 - helper_version: helper:v20251223.1
 - focus: ADR-0009 – update decision to remove backend-generated share URLs; add copy-backend flow
