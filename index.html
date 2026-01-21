@@ -1007,11 +1007,17 @@
             })
             if (!response.ok) {
               console.warn('Backend load failed', response.status)
+              backendConfig.reachability = 'offline'
+              saveBackendConfig(backendConfig)
+              updateBackendStatusBadge(backendConfig.reachability)
               return false
             }
             const data = await response.json()
             if (!data || typeof data !== 'object' || !data.data) {
               console.warn('Backend load returned invalid payload')
+              backendConfig.reachability = 'offline'
+              saveBackendConfig(backendConfig)
+              updateBackendStatusBadge(backendConfig.reachability)
               return false
             }
             state = data.data
@@ -1023,6 +1029,9 @@
             return true
           } catch (err) {
             console.warn('Backend load error', err)
+            backendConfig.reachability = 'offline'
+            saveBackendConfig(backendConfig)
+            updateBackendStatusBadge(backendConfig.reachability)
             return false
           }
         }
@@ -1046,6 +1055,9 @@
             })
             if (!response.ok) {
               console.warn('Backend save failed', response.status)
+              backendConfig.reachability = 'offline'
+              saveBackendConfig(backendConfig)
+              updateBackendStatusBadge(backendConfig.reachability)
               return false
             }
             const data = await response.json()
@@ -1058,6 +1070,9 @@
             return true
           } catch (err) {
             console.warn('Backend save error', err)
+            backendConfig.reachability = 'offline'
+            saveBackendConfig(backendConfig)
+            updateBackendStatusBadge(backendConfig.reachability)
             return false
           }
         }

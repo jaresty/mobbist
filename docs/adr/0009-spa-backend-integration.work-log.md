@@ -172,3 +172,24 @@
 - next_work:
   - Behaviour: Add test for POST/PUT payload fields (name, clientTempId) and adjust implementation.
   - Behaviour: Improve failure surfacing (status indicator/toast) for backend errors.
+
+## loop-10 | 2026-01-21T18:09:59Z | helper:v20251223.1
+- helper_version: helper:v20251223.1
+- focus: ADR-0009 – ensure load/save failures set backend offline (tests first)
+- work_log_updated: `docs/adr/0009-spa-backend-integration.work-log.md` (loop-10)
+- active_constraint: Backend failures (load/save) did not flip reachability to offline, risking continued backend attempts without clear status.
+- expected_value: Impact=High, Probability=High (tests drive behaviour), Time Sensitivity=High; uncertainty: low after fix.
+- validation_targets:
+  - `npm test`
+- evidence:
+  - red: `docs/adr/evidence/0009/loop-11.md#loop-11-red`
+  - green: `docs/adr/evidence/0009/loop-12.md#loop-12-green`
+- rollback_plan: `git restore --source=HEAD -- index.html tests/backend-status.test.js docs/adr/evidence/0009/loop-11.md docs/adr/evidence/0009/loop-12.md docs/adr/0009-spa-backend-integration.work-log.md`
+- delta_summary: helper:diff-snapshot=`index.html sets reachability offline on load/save failures; tests/backend-status.test.js adds failure expectations`; npm test red then green.
+- loops_remaining_forecast: 1 loop to assert POST/PUT payload fields and improve failure surfacing (toast/badge message); confidence: Medium.
+- residual_constraints:
+  - Uncommitted diff in `docs/adr/adr-loop-execute-helper.md` persists; avoid edits. Severity: Low. Trigger: conflicts/CI issues.
+  - Backend API still assumed; mitigation remains to stub and adjust. Severity: Medium. Trigger: divergence on integration.
+- next_work:
+  - Behaviour: Add test for POST/PUT payload shaping (name, clientTempId) and adjust implementation if needed.
+  - Behaviour: Add UI/status surfacing for backend errors beyond alert (badge message/toast).

@@ -104,6 +104,39 @@ describe('ADR-0009 backend status', () => {
     expect(confirmMock).toHaveBeenCalled()
     expect(fetchMock).not.toHaveBeenCalled()
   })
+
+  it('sets offline when backend load fails', async () => {
+    const hooks = await waitForHooks(dom.window)
+    const fetchMock = dom.window._fetchMock
+
+    hooks.backendConfig.backendUrl = 'https://api.example.com'
+    hooks.backendConfig.reachability = 'connected'
+    hooks.workspaceMeta.workspaceId = 'abc'
+
+    fetchMock.mockRejectedValueOnce(new Error('server down'))
+    const ok = await hooks.loadFromBackend()
+
+    expect(ok).toBe(false)
+    expect(fetchMock).toHaveBeenCalled()
+    expect(hooks.backendConfig.reachability).toBe('offline')
+  })
+
+  it('sets offline when backend save fails', async () => {
+    const hooks = await waitForHooks(dom.window)
+    const fetchMock = dom.window._fetchMock
+
+    hooks.backendConfig.backendUrl = 'https://api.example.com'
+    hooks.backendConfig.reachability = 'connected'
+    hooks.workspaceMeta.workspaceId = null
+    hooks.workspaceMeta.clientTempId = 'temp-123'
+
+    fetchMock.mockRejectedValueOnce(new Error('server down'))
+    const ok = await hooks.saveToBackend()
+
+    expect(ok).toBe(false)
+    expect(fetchMock).toHaveBeenCalled()
+    expect(hooks.backendConfig.reachability).toBe('offline')
+  })
 })
 
 function waitForHooks(window, timeoutMs = 2000) {
