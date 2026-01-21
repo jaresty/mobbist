@@ -194,6 +194,24 @@
   - Behaviour: Add test for POST/PUT payload shaping (name, clientTempId) and adjust implementation if needed.
   - Behaviour: Add UI/status surfacing for backend errors beyond alert (badge message/toast).
 
+## loop-12 | 2026-01-21T18:16:26Z | helper:v20251223.1
+- helper_version: helper:v20251223.1
+- focus: ADR-0009 – surface backend failure via status message while flipping offline
+- work_log_updated: `docs/adr/0009-spa-backend-integration.work-log.md` (loop-12)
+- active_constraint: Backend errors only showed alerts; status UI did not convey failure reason when switching to offline.
+- expected_value: Impact=Med (clarity for users), Probability=High, Time Sensitivity=Med; uncertainty: low after implementation.
+- validation_targets:
+  - `npm test`
+- evidence: `docs/adr/evidence/0009/loop-14.md#loop-14-green`
+- rollback_plan: `git restore --source=HEAD -- index.html docs/adr/evidence/0009/loop-14.md docs/adr/0009-spa-backend-integration.work-log.md`
+- delta_summary: helper:diff-snapshot=`index.html updates status message on backend load/save errors; tests unchanged and passing (8 tests)`; npm test green.
+- loops_remaining_forecast: 0–1 loops (share URL out of scope unless requested); confidence: Medium-High.
+- residual_constraints:
+  - Uncommitted diff in `docs/adr/adr-loop-execute-helper.md` persists; avoid edits. Severity: Low. Trigger: conflicts/CI issues.
+  - Backend API still assumed; mitigation remains to stub and adjust. Severity: Medium. Trigger: divergence on integration.
+- next_work:
+  - If required: stub/share URL flow per ADR; otherwise mark ADR behaviour set as complete.
+
 ## loop-11 | 2026-01-21T18:12:56Z | helper:v20251223.1
 - helper_version: helper:v20251223.1
 - focus: ADR-0009 – validate backend save payload shape (name, clientTempId) and cover failure/offline paths

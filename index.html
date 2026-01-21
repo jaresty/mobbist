@@ -724,6 +724,11 @@
         border: 1px solid rgba(239, 68, 68, 0.35);
       }
 
+      .backend-status-message {
+        font-size: 0.8rem;
+        color: var(--muted);
+      }
+
       .backend-controls-row {
         display: flex;
         flex-wrap: wrap;
@@ -786,6 +791,7 @@
           <div id="backendStatusBadge" class="backend-badge" data-status="unknown">Local fallback</div>
           <span class="muted" style="font-size:0.85rem;">Backend optional; falls back to local when unreachable.</span>
         </div>
+        <div id="backendStatusMessage" class="backend-status-message"></div>
         <div class="backend-controls-row">
           <input
             id="backendUrlInput"
@@ -917,11 +923,15 @@
         }
 
         /** @param {'unknown' | 'connected' | 'offline'} status */
-        function updateBackendStatusBadge(status) {
+        function updateBackendStatusBadge(status, message) {
           const badge = document.getElementById('backendStatusBadge')
+          const msgEl = document.getElementById('backendStatusMessage')
           if (!badge) return
           badge.textContent = status === 'connected' ? 'Backend connected' : 'Local fallback'
           badge.dataset.status = status
+          if (msgEl) {
+            msgEl.textContent = message || (status === 'connected' ? 'Using backend.' : 'Using local-only mode.')
+          }
         }
 
         /** @returns {WorkspaceMeta} */
@@ -1009,7 +1019,7 @@
               console.warn('Backend load failed', response.status)
               backendConfig.reachability = 'offline'
               saveBackendConfig(backendConfig)
-              updateBackendStatusBadge(backendConfig.reachability)
+              updateBackendStatusBadge(backendConfig.reachability, 'Backend unreachable; using local data.')
               return false
             }
             const data = await response.json()
@@ -1017,7 +1027,7 @@
               console.warn('Backend load returned invalid payload')
               backendConfig.reachability = 'offline'
               saveBackendConfig(backendConfig)
-              updateBackendStatusBadge(backendConfig.reachability)
+              updateBackendStatusBadge(backendConfig.reachability, 'Backend returned invalid data; using local.')
               return false
             }
             state = data.data
@@ -1031,7 +1041,7 @@
             console.warn('Backend load error', err)
             backendConfig.reachability = 'offline'
             saveBackendConfig(backendConfig)
-            updateBackendStatusBadge(backendConfig.reachability)
+            updateBackendStatusBadge(backendConfig.reachability, 'Backend load failed; using local.')
             return false
           }
         }
@@ -1057,7 +1067,7 @@
               console.warn('Backend save failed', response.status)
               backendConfig.reachability = 'offline'
               saveBackendConfig(backendConfig)
-              updateBackendStatusBadge(backendConfig.reachability)
+              updateBackendStatusBadge(backendConfig.reachability, 'Backend save failed; staying local.')
               return false
             }
             const data = await response.json()
@@ -1072,7 +1082,7 @@
             console.warn('Backend save error', err)
             backendConfig.reachability = 'offline'
             saveBackendConfig(backendConfig)
-            updateBackendStatusBadge(backendConfig.reachability)
+            updateBackendStatusBadge(backendConfig.reachability, 'Backend save failed; staying local.')
             return false
           }
         }
