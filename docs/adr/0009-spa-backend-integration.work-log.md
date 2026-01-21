@@ -132,3 +132,43 @@
 - next_work:
   - Behaviour: Add minimal confirmation prompt before overwriting local with server data when local edits exist (track dirty flag); update tests accordingly.
   - Behaviour: Ensure POST/PUT payloads align with ADR contract (name, data, clientTempId) and surface failure to UI (toast/alert already minimal).
+
+## loop-8 | 2026-01-21T18:05:37Z | helper:v20251223.1
+- helper_version: helper:v20251223.1
+- focus: ADR-0009 – dirty flag + confirmation before server reload, and test coverage for load/save/revert
+- work_log_updated: `docs/adr/0009-spa-backend-integration.work-log.md` (loop-8)
+- active_constraint: Loading from backend could overwrite local edits silently; no dirty tracking or confirmation existed.
+- expected_value: Impact=High (prevents unintended data loss), Probability=High (dirty flag + confirm), Time Sensitivity=High (core ADR guardrail); low uncertainty after tests.
+- validation_targets:
+  - `npm test`
+- evidence: `docs/adr/evidence/0009/loop-8.md#loop-8-green`
+- rollback_plan: `git restore --source=HEAD -- index.html tests/backend-status.test.js docs/adr/evidence/0009/loop-8.md docs/adr/0009-spa-backend-integration.work-log.md`
+- delta_summary: helper:diff-snapshot=`index.html | dirtySinceServerLoad tracking, confirmation before load, hooks updated; tests/backend-status.test.js adds cancel-path test; evidence loop-8 added`; npm test passes (4 tests).
+- loops_remaining_forecast: 1 loop to refine payload fields (name), error surfacing, and maybe share-url stub; confidence: Medium.
+- residual_constraints:
+  - Uncommitted diff in `docs/adr/adr-loop-execute-helper.md` persists; avoid edits. Severity: Low. Trigger: conflicts/CI issues.
+  - Backend API still assumed; mitigation remains to stub and adjust. Severity: Medium. Trigger: divergence on integration.
+- next_work:
+  - Behaviour: Ensure save payload includes name and clientTempId consistently; add test for POST/PUT payload shaping.
+  - Behaviour: Surface backend failure via UI status indicator or toast (currently alert); consider share URL stub when backend available.
+
+## loop-9 | 2026-01-21T18:06:59Z | helper:v20251223.1
+- helper_version: helper:v20251223.1
+- focus: ADR-0009 – enforce Revert to Local sets backend reachability offline
+- work_log_updated: `docs/adr/0009-spa-backend-integration.work-log.md` (loop-9)
+- active_constraint: Revert to Local did not update backend status to offline, leaving hooks reporting connected and weakening guarantees against backend calls.
+- expected_value: Impact=High (ensures disablement), Probability=High (test-driven), Time Sensitivity=High; uncertainty: low after fix.
+- validation_targets:
+  - `npm test`
+- evidence:
+  - red: `docs/adr/evidence/0009/loop-9.md#loop-9-red`
+  - green: `docs/adr/evidence/0009/loop-10.md#loop-10-green`
+- rollback_plan: `git restore --source=HEAD -- index.html tests/backend-status.test.js docs/adr/evidence/0009/loop-9.md docs/adr/evidence/0009/loop-10.md docs/adr/0009-spa-backend-integration.work-log.md`
+- delta_summary: helper:diff-snapshot=`index.html | revertToLocal mutates backendConfig to offline; tests/backend-status.test.js expects offline reachability`; npm test red then green.
+- loops_remaining_forecast: 1 loop to validate payload shaping (name/clientTempId) and error surfacing; confidence: Medium.
+- residual_constraints:
+  - Uncommitted diff in `docs/adr/adr-loop-execute-helper.md` persists; avoid edits. Severity: Low. Trigger: conflicts/CI issues.
+  - Backend API still assumed; mitigation remains to stub and adjust. Severity: Medium. Trigger: divergence on integration.
+- next_work:
+  - Behaviour: Add test for POST/PUT payload fields (name, clientTempId) and adjust implementation.
+  - Behaviour: Improve failure surfacing (status indicator/toast) for backend errors.

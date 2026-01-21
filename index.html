@@ -995,6 +995,10 @@
 
         async function loadFromBackend() {
           if (!isBackendEnabled() || !workspaceMeta.workspaceId) return false
+          if (dirtySinceServerLoad) {
+            const confirmed = window.confirm('Reloading from server will discard local changes.')
+            if (!confirmed) return false
+          }
           const url = `${backendConfig.backendUrl}/workspaces/${workspaceMeta.workspaceId}`
           try {
             const response = await fetch(url, {
@@ -1014,6 +1018,7 @@
             saveState()
             workspaceMeta.persisted = true
             saveWorkspaceMeta(workspaceMeta)
+            dirtySinceServerLoad = false
             render()
             return true
           } catch (err) {
@@ -1049,6 +1054,7 @@
               workspaceMeta.persisted = true
               saveWorkspaceMeta(workspaceMeta)
             }
+            dirtySinceServerLoad = false
             return true
           } catch (err) {
             console.warn('Backend save error', err)
@@ -1057,7 +1063,9 @@
         }
 
         function revertToLocal() {
-          backendConfig = createDefaultBackendConfig()
+          backendConfig.backendUrl = ''
+          backendConfig.reachability = 'offline'
+          backendConfig.lastCheckedAt = Date.now()
           saveBackendConfig(backendConfig)
           updateBackendStatusBadge(backendConfig.reachability)
         }
@@ -1460,6 +1468,7 @@
         let historyShortcutBound = false
         let historyOverlayEl = null
         let suppressTenureIndicatorClickUntil = 0
+        let dirtySinceServerLoad = false
 
         function createInitialState() {
 
@@ -2650,6 +2659,7 @@
           redoStack = []
           announceHistory(`${description}. Undo available.`)
           saveState()
+          dirtySinceServerLoad = true
           render()
           return result
         }
@@ -4949,9 +4959,13 @@
             revertToLocal,
             workspaceMeta,
             getState: () => state,
-            setState: (next) => {
+            setState: (next, markDirty = true) => {
               state = next
+              if (markDirty) dirtySinceServerLoad = true
               render()
+            },
+            setDirtySinceServerLoad: (value) => {
+              dirtySinceServerLoad = Boolean(value)
             },
           }
         }

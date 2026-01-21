@@ -12,6 +12,7 @@ describe('ADR-0009 backend status', () => {
 
   beforeEach(() => {
     const fetchMock = vi.fn(() => Promise.reject(new Error('offline')))
+    const confirmMock = vi.fn(() => true)
     dom = new JSDOM(html, {
       url: 'https://app.mobbist.test/',
       runScripts: 'dangerously',
@@ -20,7 +21,7 @@ describe('ADR-0009 backend status', () => {
       beforeParse(window) {
         window.fetch = (...args) => fetchMock(...args)
         window.alert = () => {}
-        window.confirm = () => true
+        window.confirm = (...args) => confirmMock(...args)
         window.prompt = () => ''
         window.navigator.clipboard = {
           writeText: () => Promise.resolve(),
@@ -29,6 +30,7 @@ describe('ADR-0009 backend status', () => {
       },
     })
     dom.window._fetchMock = fetchMock
+    dom.window._confirmMock = confirmMock
   })
 
   it('shows offline/local fallback when backend is unreachable', async () => {
@@ -81,6 +83,25 @@ describe('ADR-0009 backend status', () => {
     const ok = await hooks.saveToBackend()
 
     expect(ok).toBe(false)
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(hooks.backendConfig.reachability).toBe('offline')
+  })
+
+  it('prompts before loading when local edits exist and aborts on cancel', async () => {
+    const hooks = await waitForHooks(dom.window)
+    const fetchMock = dom.window._fetchMock
+    const confirmMock = dom.window._confirmMock
+
+    hooks.backendConfig.backendUrl = 'https://api.example.com'
+    hooks.backendConfig.reachability = 'connected'
+    hooks.workspaceMeta.workspaceId = 'abc'
+    hooks.setDirtySinceServerLoad(true)
+
+    confirmMock.mockReturnValueOnce(false)
+    const ok = await hooks.loadFromBackend()
+
+    expect(ok).toBe(false)
+    expect(confirmMock).toHaveBeenCalled()
     expect(fetchMock).not.toHaveBeenCalled()
   })
 })
