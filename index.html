@@ -795,6 +795,8 @@
             aria-label="Backend base URL"
           />
           <button id="checkBackendButton" class="ghost">Save &amp; Check</button>
+          <button id="loadBackendButton" class="ghost">Load from Backend</button>
+          <button id="saveBackendButton" class="primary">Save to Backend</button>
           <button id="revertToLocalButton" class="danger">Revert to Local</button>
         </div>
       </section>
@@ -843,6 +845,7 @@
         const STORAGE_KEY = 'mobbist:v1'
         const LEGACY_STORAGE_KEYS = ['pairPlanner:v1']
         const CONFIG_STORAGE_KEY = 'mobbist:config:v1'
+        const WORKSPACE_META_KEY = 'mobbist:workspace-meta:v1'
         const BACKEND_CHECK_TIMEOUT_MS = 4000
         const NEW_TRACK_OPTION_VALUE = '__create_new_track__'
         const HISTORY_LIMIT = 30
@@ -862,6 +865,7 @@
          * @typedef {{ assignments: { [personId: string]: TenureAssignment | undefined }, overrides: { [trackId: string]: Partial<TenureThresholds> | undefined }, config: TenureThresholds }} TenureState
          * @typedef {{ people: Person[], roles: Role[], tracks: Track[], nextPersonId: number, nextTrackId: number, nextRoleId: number, defaultTrackCapacity: number, tenure: TenureState }} PlannerState
          * @typedef {{ backendUrl: string, reachability: 'unknown' | 'connected' | 'offline', lastCheckedAt: number | null }} BackendConfig
+         * @typedef {{ workspaceId: string | null, clientTempId: string, persisted: boolean }} WorkspaceMeta
          */
 
         function normalizeBackendUrl(url) {
@@ -920,6 +924,45 @@
           badge.dataset.status = status
         }
 
+        /** @returns {WorkspaceMeta} */
+        function createDefaultWorkspaceMeta() {
+          return {
+            workspaceId: null,
+            clientTempId: `temp-${Date.now()}`,
+            persisted: false,
+          }
+        }
+
+        /** @returns {WorkspaceMeta} */
+        function loadWorkspaceMeta() {
+          try {
+            const raw = window.localStorage.getItem(WORKSPACE_META_KEY)
+            if (!raw) return createDefaultWorkspaceMeta()
+            const parsed = JSON.parse(raw)
+            return {
+              workspaceId: typeof parsed.workspaceId === 'string' && parsed.workspaceId.trim() ? parsed.workspaceId.trim() : null,
+              clientTempId: typeof parsed.clientTempId === 'string' && parsed.clientTempId.trim() ? parsed.clientTempId.trim() : `temp-${Date.now()}`,
+              persisted: Boolean(parsed.persisted),
+            }
+          } catch (e) {
+            console.warn('Failed to load workspace meta, resetting.', e)
+            return createDefaultWorkspaceMeta()
+          }
+        }
+
+        /** @param {WorkspaceMeta} meta */
+        function saveWorkspaceMeta(meta) {
+          try {
+            window.localStorage.setItem(WORKSPACE_META_KEY, JSON.stringify(meta))
+          } catch (e) {
+            console.warn('Failed to save workspace meta.', e)
+          }
+        }
+
+        function isBackendEnabled() {
+          return backendConfig.backendUrl && backendConfig.reachability === 'connected'
+        }
+
         async function checkBackendReachability() {
           const normalizedUrl = normalizeBackendUrl(backendConfig.backendUrl)
           if (!normalizedUrl) {
@@ -948,6 +991,75 @@
             updateBackendStatusBadge(backendConfig.reachability)
           }
           return backendConfig.reachability
+        }
+
+        async function loadFromBackend() {
+          if (!isBackendEnabled() || !workspaceMeta.workspaceId) return false
+          const url = `${backendConfig.backendUrl}/workspaces/${workspaceMeta.workspaceId}`
+          try {
+            const response = await fetch(url, {
+              method: 'GET',
+              headers: { Accept: 'application/json' },
+            })
+            if (!response.ok) {
+              console.warn('Backend load failed', response.status)
+              return false
+            }
+            const data = await response.json()
+            if (!data || typeof data !== 'object' || !data.data) {
+              console.warn('Backend load returned invalid payload')
+              return false
+            }
+            state = data.data
+            saveState()
+            workspaceMeta.persisted = true
+            saveWorkspaceMeta(workspaceMeta)
+            render()
+            return true
+          } catch (err) {
+            console.warn('Backend load error', err)
+            return false
+          }
+        }
+
+        async function saveToBackend() {
+          if (!isBackendEnabled()) return false
+          const snapshot = { id: workspaceMeta.workspaceId, name: 'Workspace', data: state }
+          const method = workspaceMeta.workspaceId ? 'PUT' : 'POST'
+          const url = workspaceMeta.workspaceId
+            ? `${backendConfig.backendUrl}/workspaces/${workspaceMeta.workspaceId}`
+            : `${backendConfig.backendUrl}/workspaces`
+          try {
+            const response = await fetch(url, {
+              method,
+              headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+              body: JSON.stringify(
+                method === 'POST'
+                  ? { ...snapshot, clientTempId: workspaceMeta.clientTempId }
+                  : snapshot,
+              ),
+            })
+            if (!response.ok) {
+              console.warn('Backend save failed', response.status)
+              return false
+            }
+            const data = await response.json()
+            if (data && data.id) {
+              workspaceMeta.workspaceId = data.id
+              workspaceMeta.persisted = true
+              saveWorkspaceMeta(workspaceMeta)
+            }
+            return true
+          } catch (err) {
+            console.warn('Backend save error', err)
+            return false
+          }
+        }
+
+        function revertToLocal() {
+          backendConfig = createDefaultBackendConfig()
+          saveBackendConfig(backendConfig)
+          updateBackendStatusBadge(backendConfig.reachability)
         }
  
  
@@ -1327,6 +1439,8 @@
         let state
         /** @type {BackendConfig} */
         let backendConfig = loadBackendConfig()
+        /** @type {WorkspaceMeta} */
+        let workspaceMeta = loadWorkspaceMeta()
         let currentDragPersonId = null
         let currentDragPersonEl = null
         let currentDragRoleId = null
@@ -4830,6 +4944,15 @@
             normalizeBackendUrl,
             loadBackendConfig,
             saveBackendConfig,
+            loadFromBackend,
+            saveToBackend,
+            revertToLocal,
+            workspaceMeta,
+            getState: () => state,
+            setState: (next) => {
+              state = next
+              render()
+            },
           }
         }
 
@@ -4841,6 +4964,8 @@
 
           const backendUrlInput = document.getElementById('backendUrlInput')
           const checkBackendButton = document.getElementById('checkBackendButton')
+          const loadBackendButton = document.getElementById('loadBackendButton')
+          const saveBackendButton = document.getElementById('saveBackendButton')
           const revertToLocalButton = document.getElementById('revertToLocalButton')
 
           if (backendUrlInput) {
@@ -4867,11 +4992,27 @@
                 'Revert to local will disable backend usage and keep your current local state. Continue?',
               )
               if (!confirmReset) return
-              backendConfig = createDefaultBackendConfig()
-              saveBackendConfig(backendConfig)
+              revertToLocal()
+              workspaceMeta = createDefaultWorkspaceMeta()
+              saveWorkspaceMeta(workspaceMeta)
               if (backendUrlInput) backendUrlInput.value = ''
-              updateBackendStatusBadge(backendConfig.reachability)
               alert('Backend disabled. Running in local-only mode.')
+            })
+          }
+
+          if (loadBackendButton) {
+            loadBackendButton.addEventListener('click', async (ev) => {
+              ev.preventDefault()
+              const ok = await loadFromBackend()
+              if (!ok) alert('Failed to load from backend. Staying on local data.')
+            })
+          }
+
+          if (saveBackendButton) {
+            saveBackendButton.addEventListener('click', async (ev) => {
+              ev.preventDefault()
+              const ok = await saveToBackend()
+              if (!ok) alert('Failed to save to backend. Local data is still intact.')
             })
           }
 

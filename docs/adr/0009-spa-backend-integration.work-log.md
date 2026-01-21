@@ -113,3 +113,22 @@
 - next_work:
   - Behaviour: Implement backend load/save fetch paths (GET/PUT/POST) with offline fallback; add Vitest/jsdom validation using fetch stubs.
   - Behaviour: Validate Revert to Local preserves local snapshot and disables backend calls (Vitest/jsdom ensuring no fetch after revert).
+
+## loop-7 | 2026-01-21T17:54:57Z | helper:v20251223.1
+- helper_version: helper:v20251223.1
+- focus: ADR-0009 – backend load/save wiring with offline fallback and Revert to Local guard
+- work_log_updated: `docs/adr/0009-spa-backend-integration.work-log.md` (loop-7)
+- active_constraint: Backend persistence flows were unimplemented and unvalidated; Revert to Local did not guarantee backend calls halt.
+- expected_value: Impact=High (core ADR behaviour), Probability=High (tests cover flows), Time Sensitivity=High (unblocks further backend features); uncertainty: low after green tests.
+- validation_targets:
+  - `npm test`
+- evidence: `docs/adr/evidence/0009/loop-7.md#loop-7-green`
+- rollback_plan: `git restore --source=HEAD -- index.html tests/backend-status.test.js docs/adr/evidence/0009/loop-7.md docs/adr/0009-spa-backend-integration.work-log.md`
+- delta_summary: helper:diff-snapshot=`index.html | backend load/save functions, UI buttons, hooks; tests/backend-status.test.js covers offline status, backend load, revert-to-local; package files unchanged this loop`; `npm test` passes (3 tests).
+- loops_remaining_forecast: 1 loop to refine save/load confirmation UX and workspace ID lifecycle; confidence: Medium.
+- residual_constraints:
+  - Uncommitted diff in `docs/adr/adr-loop-execute-helper.md` persists; avoid edits. Severity: Low. Trigger: conflicts/CI issues.
+  - Backend API still assumed; mitigation remains to stub and adjust. Severity: Medium. Trigger: divergence on integration.
+- next_work:
+  - Behaviour: Add minimal confirmation prompt before overwriting local with server data when local edits exist (track dirty flag); update tests accordingly.
+  - Behaviour: Ensure POST/PUT payloads align with ADR contract (name, data, clientTempId) and surface failure to UI (toast/alert already minimal).

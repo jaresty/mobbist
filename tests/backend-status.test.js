@@ -1,4 +1,4 @@
-import { describe, expect, it, beforeAll } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import fs from 'fs'
 import path from 'path'
 import { JSDOM } from 'jsdom'
@@ -10,14 +10,15 @@ describe('ADR-0009 backend status', () => {
   /** @type {import('jsdom').JSDOM} */
   let dom
 
-  beforeAll(() => {
+  beforeEach(() => {
+    const fetchMock = vi.fn(() => Promise.reject(new Error('offline')))
     dom = new JSDOM(html, {
       url: 'https://app.mobbist.test/',
       runScripts: 'dangerously',
       resources: 'usable',
       pretendToBeVisual: true,
       beforeParse(window) {
-        window.fetch = () => Promise.reject(new Error('offline'))
+        window.fetch = (...args) => fetchMock(...args)
         window.alert = () => {}
         window.confirm = () => true
         window.prompt = () => ''
@@ -27,6 +28,7 @@ describe('ADR-0009 backend status', () => {
         }
       },
     })
+    dom.window._fetchMock = fetchMock
   })
 
   it('shows offline/local fallback when backend is unreachable', async () => {
@@ -42,6 +44,44 @@ describe('ADR-0009 backend status', () => {
 
     expect(badge.dataset.status).toBe('offline')
     expect((badge.textContent || '').toLowerCase()).toContain('local fallback')
+  })
+
+  it('loads from backend when connected and workspaceId present', async () => {
+    const hooks = await waitForHooks(dom.window)
+    const fetchMock = dom.window._fetchMock
+    const sampleState = { ...hooks.getState(), tracks: [], people: [{ id: 'p1', name: 'Alice' }] }
+
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ id: 'abc', name: 'Workspace', data: sampleState }),
+    })
+
+    hooks.backendConfig.backendUrl = 'https://api.example.com'
+    hooks.backendConfig.reachability = 'connected'
+    hooks.workspaceMeta.workspaceId = 'abc'
+    const ok = await hooks.loadFromBackend()
+
+    expect(ok).toBe(true)
+    expect(hooks.getState().people[0].name).toBe('Alice')
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://api.example.com/workspaces/abc',
+      expect.objectContaining({ method: 'GET' }),
+    )
+  })
+
+  it('revert to local prevents backend calls on save', async () => {
+    const hooks = await waitForHooks(dom.window)
+    const fetchMock = dom.window._fetchMock
+
+    hooks.backendConfig.backendUrl = 'https://api.example.com'
+    hooks.backendConfig.reachability = 'connected'
+    hooks.workspaceMeta.workspaceId = 'abc'
+
+    hooks.revertToLocal()
+    const ok = await hooks.saveToBackend()
+
+    expect(ok).toBe(false)
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 })
 
