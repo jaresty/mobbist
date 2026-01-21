@@ -269,6 +269,25 @@
 - next_work:
   - Optional refinement of retry control; otherwise mark ADR complete.
 
+## loop-17 | 2026-01-21T18:47:06Z | helper:v20251223.1
+- helper_version: helper:v20251223.1
+- focus: ADR-0009 – add Retry control, toast messaging, and confirm buttons disable on offline
+- work_log_updated: `docs/adr/0009-spa-backend-integration.work-log.md` (loop-17)
+- active_constraint: UI lacked retry affordance and lightweight messaging; needed confirmation that offline disables buttons per contract.
+- expected_value: Impact=Med, Probability=High, Time Sensitivity=Med; uncertainty: low after green.
+- validation_targets:
+  - `npm test`
+- evidence:
+  - green: `docs/adr/evidence/0009/loop-19.md#loop-19-green`
+- rollback_plan: `git restore --source=HEAD -- index.html docs/adr/evidence/0009/loop-19.md docs/adr/0009-spa-backend-integration.work-log.md`
+- delta_summary: helper:diff-snapshot=`index.html adds Retry button, toast helper, disables buttons on offline; tests remain passing (8)`; npm test green.
+- loops_remaining_forecast: 0 (ADR behaviours implemented); confidence: High.
+- residual_constraints:
+  - Uncommitted diff in `docs/adr/adr-loop-execute-helper.md` persists; avoid edits. Severity: Low. Trigger: conflicts/CI issues.
+  - Backend API still assumed; mitigation remains to stub and adjust. Severity: Medium. Trigger: divergence on integration.
+- next_work:
+  - Mark ADR complete or further refine messaging copy if desired.
+
 ## loop-13 | 2026-01-21T18:19:30Z | helper:v20251223.1
 - helper_version: helper:v20251223.1
 - focus: ADR-0009 – update decision to remove backend-generated share URLs; add copy-backend flow

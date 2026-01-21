@@ -748,6 +748,27 @@
         white-space: nowrap;
       }
 
+      .toast {
+        position: fixed;
+        right: 16px;
+        bottom: 16px;
+        padding: 10px 12px;
+        background: #111827;
+        color: #ffffff;
+        border-radius: 6px;
+        font-size: 0.9rem;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+        opacity: 0;
+        transform: translateY(8px);
+        transition: opacity 150ms ease, transform 150ms ease;
+        z-index: 9999;
+      }
+
+      .toast.visible {
+        opacity: 1;
+        transform: translateY(0);
+      }
+
       .track-full {
         border-color: #f97316;
       }
@@ -805,6 +826,7 @@
           <button id="saveBackendButton" class="primary">Save to Backend</button>
           <button id="revertToLocalButton" class="danger">Revert to Local</button>
           <button id="copyBackendUrlButton" class="ghost">Copy Backend URL</button>
+          <button id="retryBackendButton" class="ghost">Retry Backend</button>
         </div>
       </section>
 
@@ -928,6 +950,21 @@
           const saveBtn = document.getElementById('saveBackendButton')
           if (loadBtn) loadBtn.disabled = disable
           if (saveBtn) saveBtn.disabled = disable
+        }
+
+        function showToast(message, durationMs = 2500) {
+          let toast = document.getElementById('toast')
+          if (!toast) {
+            toast = document.createElement('div')
+            toast.id = 'toast'
+            toast.className = 'toast'
+            document.body.appendChild(toast)
+          }
+          toast.textContent = message
+          toast.classList.add('visible')
+          window.setTimeout(() => {
+            toast.classList.remove('visible')
+          }, durationMs)
         }
 
         /** @param {'unknown' | 'connected' | 'offline'} status */
@@ -5086,6 +5123,18 @@
             })
           }
 
+          if (retryBackendButton) {
+            retryBackendButton.addEventListener('click', async (ev) => {
+              ev.preventDefault()
+              await checkBackendReachability()
+              if (backendConfig.reachability === 'connected') {
+                showToast('Backend reachable.')
+              } else {
+                showToast('Backend still unreachable.')
+              }
+            })
+          }
+
           if (backendConfig.backendUrl) {
             checkBackendReachability().catch((err) => {
               console.warn('Backend check failed; staying in local mode.', err)
@@ -5268,3 +5317,4 @@
           if (loadBtn) loadBtn.disabled = disable
           if (saveBtn) saveBtn.disabled = disable
         }
+          const retryBackendButton = document.getElementById('retryBackendButton')
