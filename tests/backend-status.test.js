@@ -342,6 +342,44 @@ describe('ADR-0011 backend auto-load and drawer', () => {
     expect(hooks.backendConfig.backendUrl).toBe('')
     expect(hooks.workspaceMeta.workspaceId).toBeNull()
   })
+
+  it('shows heartbeat checking and connected states distinctly', async () => {
+    let resolveFetch
+    const fetchPromise = new Promise((resolve) => {
+      resolveFetch = resolve
+    })
+    const fetchMock = vi.fn(() => fetchPromise)
+    const dom = createDom({ fetchMock })
+    const hooks = await waitForHooks(dom.window)
+    hooks.backendConfig.backendUrl = 'https://api.example.com'
+
+    const reachPromise = hooks.checkBackendReachability()
+
+    const heartbeat = dom.window.document.getElementById('backendHeartbeatStatus')
+    expect(heartbeat?.dataset.status).toBe('checking')
+    expect(heartbeat?.textContent).toBe('Heartbeat: Checking')
+
+    resolveFetch({ ok: true })
+    const reach = await reachPromise
+
+    expect(reach).toBe('connected')
+    expect(heartbeat?.dataset.status).toBe('connected')
+    expect(heartbeat?.textContent).toBe('Heartbeat: Connected')
+  })
+
+  it('shows heartbeat unreachable state after failed check', async () => {
+    const fetchMock = vi.fn(() => Promise.resolve({ ok: false }))
+    const dom = createDom({ fetchMock })
+    const hooks = await waitForHooks(dom.window)
+    hooks.backendConfig.backendUrl = 'https://api.example.com'
+
+    const reach = await hooks.checkBackendReachability()
+
+    expect(reach).toBe('offline')
+    const heartbeat = dom.window.document.getElementById('backendHeartbeatStatus')
+    expect(heartbeat?.dataset.status).toBe('unreachable')
+    expect(heartbeat?.textContent).toBe('Heartbeat: Unreachable')
+  })
 })
 
 describe('ADR-0011 autosave and toast behaviour', () => {

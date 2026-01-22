@@ -158,3 +158,25 @@
   - sendBeacon payload for existing workspaces uses a best-effort `__method` hint; backend may ignore it. Mitigation: evaluate keepalive fetch-only fallback or align backend support; monitor during manual smoke. Severity: Low. Trigger: backend rejects beacon payloads. Owner: `docs/adr/0010-backend-contract.md`.
 - next_work:
   - Behaviour: Optional heartbeat status copy polish (checking/unreachable/local) if product language changes; validate via `npm test`.
+
+## loop-8 | 2026-01-22T21:04:20Z | helper:v20251223.1
+- helper_version: helper:v20251223.1
+- focus: ADR-0011 (Decision section 4) – make heartbeat copy explicit for checking/connected/unreachable states.
+- work_log_updated: `docs/adr/0011-backend-auto-load-and-config-surface.work-log.md` (loop-8)
+- active_constraint: Heartbeat copy is ambiguous (e.g., "Checking..." and lowercase "unreachable"), so ADR-0011’s distinct status requirement lacks explicit labels; `npm test` fails on the new copy guardrails.
+- expected_value: Impact=Low (copy clarity), Probability=High (string updates), Time Sensitivity=Low (polish); uncertainty: low after green.
+- validation_targets:
+  - `npm test`
+- mitigation_ladder: 1) add specifying tests for heartbeat copy; 2) update heartbeat label strings; 3) confirm checking/connected/unreachable states remain distinct.
+- evidence:
+  - red: `docs/adr/evidence/0011/loop-8.md#loop-8-red`
+  - green: `docs/adr/evidence/0011/loop-8.md#loop-8-green`
+  - removal: `docs/adr/evidence/0011/loop-8.md#loop-8-removal`
+- rollback_plan: `git restore --source=HEAD -- index.html tests/backend-status.test.js docs/adr/evidence/0011/loop-8.md` then re-run `npm test` to observe the heartbeat copy regression.
+- delta_summary: helper:diff-snapshot=`index.html | 6 insertions(+), 3 deletions(-); tests/backend-status.test.js | 38 insertions(+)`; clarified heartbeat labels for checking/connected/unreachable; wip preserved at `docs/adr/evidence/0011/loop-8-wip.patch` for removal check.
+- loops_remaining_forecast: 0 loops (ADR-0011 behaviour coverage complete); confidence: Medium.
+- residual_constraints:
+  - End-to-end backend smoke requires a running backend service outside repo control. Mitigation: keep jsdom/Vitest coverage and run manual smoke when backend is available. Severity: Medium. Trigger: backend endpoint changes or smoke test failures. Owner: `docs/adr/0010-backend-contract.md`.
+  - sendBeacon payload for existing workspaces uses a best-effort `__method` hint; backend may ignore it. Mitigation: evaluate keepalive fetch-only fallback or align backend support; monitor during manual smoke. Severity: Low. Trigger: backend rejects beacon payloads. Owner: `docs/adr/0010-backend-contract.md`.
+- next_work:
+  - Behaviour: Run manual backend smoke once backend service is available; validate via a live backend session.

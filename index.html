@@ -1087,17 +1087,17 @@
             return
           }
           if (status === 'checking') {
-            heartbeatEl.textContent = 'Checking...'
+            heartbeatEl.textContent = 'Heartbeat: Checking'
             heartbeatEl.dataset.status = 'checking'
             return
           }
           if (status === 'connected') {
-            heartbeatEl.textContent = 'Heartbeat: ok'
+            heartbeatEl.textContent = 'Heartbeat: Connected'
             heartbeatEl.dataset.status = 'connected'
             return
           }
           if (status === 'offline') {
-            heartbeatEl.textContent = 'Heartbeat: unreachable'
+            heartbeatEl.textContent = 'Heartbeat: Unreachable'
             heartbeatEl.dataset.status = 'unreachable'
             return
           }
