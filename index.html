@@ -690,6 +690,7 @@
         border: 1px solid var(--border);
         border-radius: 8px;
         box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
+        position: relative;
       }
 
       .backend-status-bar {
@@ -775,11 +776,32 @@
         display: none;
         flex-direction: column;
         gap: 8px;
-        width: 100%;
+        width: min(720px, 100%);
       }
 
       .backend-drawer[data-open='true'] {
         display: flex;
+      }
+
+      .backend-popover {
+        position: absolute;
+        right: 12px;
+        top: calc(100% + 8px);
+        padding: 10px 12px;
+        background: #ffffff;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        box-shadow: 0 10px 30px rgba(15, 23, 42, 0.15);
+        z-index: 5;
+      }
+
+      @media (max-width: 700px) {
+        .backend-popover {
+          position: static;
+          width: 100%;
+          box-shadow: none;
+          border-radius: 8px;
+        }
       }
 
       .backend-controls-row {
@@ -871,7 +893,7 @@
           <div id="backendStatusMessage" class="backend-status-message"></div>
           <button id="backendConfigureButton" class="ghost backend-configure">Configure</button>
         </div>
-        <div id="backendDrawer" class="backend-drawer" data-open="false" aria-hidden="true">
+        <div id="backendDrawer" class="backend-drawer backend-popover" data-open="false" aria-hidden="true">
           <div class="backend-controls-row">
             <input
               id="backendUrlInput"

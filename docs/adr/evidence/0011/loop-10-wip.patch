@@ -1,0 +1,76 @@
+diff --git a/index.html b/index.html
+index afda9c1..80d2175 100644
+--- a/index.html
++++ b/index.html
+@@ -690,6 +690,7 @@
+         border: 1px solid var(--border);
+         border-radius: 8px;
+         box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
++        position: relative;
+       }
+ 
+       .backend-status-bar {
+@@ -775,13 +776,34 @@
+         display: none;
+         flex-direction: column;
+         gap: 8px;
+-        width: 100%;
++        width: min(720px, 100%);
+       }
+ 
+       .backend-drawer[data-open='true'] {
+         display: flex;
+       }
+ 
++      .backend-popover {
++        position: absolute;
++        right: 12px;
++        top: calc(100% + 8px);
++        padding: 10px 12px;
++        background: #ffffff;
++        border: 1px solid var(--border);
++        border-radius: 10px;
++        box-shadow: 0 10px 30px rgba(15, 23, 42, 0.15);
++        z-index: 5;
++      }
++
++      @media (max-width: 700px) {
++        .backend-popover {
++          position: static;
++          width: 100%;
++          box-shadow: none;
++          border-radius: 8px;
++        }
++      }
++
+       .backend-controls-row {
+         display: flex;
+         flex-wrap: wrap;
+@@ -871,7 +893,7 @@
+           <div id="backendStatusMessage" class="backend-status-message"></div>
+           <button id="backendConfigureButton" class="ghost backend-configure">Configure</button>
+         </div>
+-        <div id="backendDrawer" class="backend-drawer" data-open="false" aria-hidden="true">
++        <div id="backendDrawer" class="backend-drawer backend-popover" data-open="false" aria-hidden="true">
+           <div class="backend-controls-row">
+             <input
+               id="backendUrlInput"
+diff --git a/tests/backend-status.test.js b/tests/backend-status.test.js
+index c45d68d..0b24eeb 100755
+--- a/tests/backend-status.test.js
++++ b/tests/backend-status.test.js
+@@ -193,6 +193,14 @@ describe('ADR-0011 backend auto-load and drawer', () => {
+     expect(statusBar?.nextElementSibling).toBe(statusMeta)
+   })
+ 
++  it('renders backend controls as a popover', async () => {
++    const dom = createDom()
++    await waitForHooks(dom.window)
++    const drawer = dom.window.document.getElementById('backendDrawer')
++    expect(drawer).not.toBeNull()
++    expect(drawer?.classList.contains('backend-popover')).toBe(true)
++  })
++
+   it('auto-connects and loads from backend on startup', async () => {
+     const fetchMock = vi.fn()
+     const sampleState = {
