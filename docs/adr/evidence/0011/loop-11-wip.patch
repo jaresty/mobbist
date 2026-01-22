@@ -1,0 +1,340 @@
+diff --git a/index.html b/index.html
+index 80d2175..1d1671d 100644
+--- a/index.html
++++ b/index.html
+@@ -681,24 +681,21 @@
+       }
+ 
+       .backend-status {
+-        display: flex;
++        display: inline-flex;
+         flex-direction: column;
+         gap: 6px;
+-        align-items: stretch;
+-        padding: 10px 12px;
+-        background: #ffffff;
+-        border: 1px solid var(--border);
+-        border-radius: 8px;
+-        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
++        align-items: flex-start;
++        padding: 0;
++        background: transparent;
++        border: 0;
++        box-shadow: none;
+         position: relative;
+       }
+ 
+       .backend-status-bar {
+         display: flex;
+         align-items: center;
+-        justify-content: space-between;
+         gap: 12px;
+-        flex-wrap: wrap;
+       }
+ 
+       .backend-status-left {
+@@ -708,7 +705,9 @@
+         flex-wrap: wrap;
+       }
+ 
+-      .backend-badge {
++      .backend-pill {
++        border: 0;
++        cursor: pointer;
+         display: inline-flex;
+         align-items: center;
+         gap: 6px;
+@@ -718,42 +717,39 @@
+         font-weight: 600;
+         background: #e5e7eb;
+         color: #111827;
++        transition: box-shadow 120ms ease;
++      }
++
++      .backend-pill:focus-visible {
++        outline: 2px solid rgba(59, 130, 246, 0.6);
++        outline-offset: 2px;
+       }
+ 
+-      .backend-badge[data-status='connected'] {
++      .backend-pill[data-status='connected'] {
+         background: rgba(16, 185, 129, 0.15);
+         color: #065f46;
+         border: 1px solid rgba(16, 185, 129, 0.4);
+       }
+ 
+-      .backend-badge[data-status='checking'] {
++      .backend-pill[data-status='checking'] {
+         background: rgba(59, 130, 246, 0.12);
+         color: #1d4ed8;
+         border: 1px solid rgba(59, 130, 246, 0.35);
+       }
+ 
+-      .backend-badge[data-status='unreachable'] {
++      .backend-pill[data-status='unreachable'] {
+         background: rgba(239, 68, 68, 0.12);
+         color: #991b1b;
+         border: 1px solid rgba(239, 68, 68, 0.35);
+       }
+ 
+-      .backend-badge[data-status='local'],
+-      .backend-badge[data-status='unknown'] {
++      .backend-pill[data-status='local'],
++      .backend-pill[data-status='unknown'] {
+         background: #e5e7eb;
+         color: #111827;
+         border: 1px solid var(--border);
+       }
+ 
+-      .backend-heartbeat {
+-        font-size: 0.7rem;
+-        color: var(--muted);
+-      }
+-
+-      .backend-heartbeat[data-status='idle'] {
+-        display: none;
+-      }
+-
+       .backend-status-message {
+         font-size: 0.8rem;
+         color: var(--muted);
+@@ -767,11 +763,6 @@
+         flex-wrap: wrap;
+       }
+ 
+-      .backend-configure {
+-        font-size: 0.75rem;
+-        padding: 2px 8px;
+-      }
+-
+       .backend-drawer {
+         display: none;
+         flex-direction: column;
+@@ -861,6 +852,32 @@
+         <div>
+           <h1>Mobbist</h1>
+           <p>Plan pairs and mobs and reshuffle people quickly in your browser.</p>
++          <section class="backend-status" aria-label="Backend status and settings">
++            <div class="backend-status-bar">
++              <div class="backend-status-left">
++                <button id="backendConfigureButton" class="backend-pill" data-status="unknown">
++                  Backend: Local
++                </button>
++              </div>
++            </div>
++            <div id="backendDrawer" class="backend-drawer backend-popover" data-open="false" aria-hidden="true">
++              <div class="backend-controls-row">
++                <input
++                  id="backendUrlInput"
++                  type="url"
++                  inputmode="url"
++                  placeholder="https://api.example.com"
++                  aria-label="Backend base URL"
++                />
++                <button id="checkBackendButton" class="ghost">Connect &amp; Check</button>
++                <button id="loadBackendButton" class="ghost">Load from Backend</button>
++                <button id="saveBackendButton" class="primary">Save to Backend</button>
++                <button id="revertToLocalButton" class="danger">Switch to Local Only</button>
++                <button id="copyBackendUrlButton" class="ghost">Copy Backend URL</button>
++                <button id="retryBackendButton" class="ghost">Retry Backend Connection</button>
++              </div>
++            </div>
++          </section>
+         </div>
+         <div class="controls">
+           <div class="controls-row primary-controls">
+@@ -882,36 +899,6 @@
+         </div>
+       </div>
+ 
+-      <section class="backend-status" aria-label="Backend status and settings">
+-        <div class="backend-status-bar">
+-          <div class="backend-status-left">
+-            <div id="backendStatusBadge" class="backend-badge" data-status="unknown">Backend: Local</div>
+-            <div id="backendHeartbeatStatus" class="backend-heartbeat" data-status="idle"></div>
+-          </div>
+-        </div>
+-        <div class="backend-status-meta">
+-          <div id="backendStatusMessage" class="backend-status-message"></div>
+-          <button id="backendConfigureButton" class="ghost backend-configure">Configure</button>
+-        </div>
+-        <div id="backendDrawer" class="backend-drawer backend-popover" data-open="false" aria-hidden="true">
+-          <div class="backend-controls-row">
+-            <input
+-              id="backendUrlInput"
+-              type="url"
+-              inputmode="url"
+-              placeholder="https://api.example.com"
+-              aria-label="Backend base URL"
+-            />
+-            <button id="checkBackendButton" class="ghost">Connect &amp; Check</button>
+-            <button id="loadBackendButton" class="ghost">Load from Backend</button>
+-            <button id="saveBackendButton" class="primary">Save to Backend</button>
+-            <button id="revertToLocalButton" class="danger">Switch to Local Only</button>
+-            <button id="copyBackendUrlButton" class="ghost">Copy Backend URL</button>
+-            <button id="retryBackendButton" class="ghost">Retry Backend Connection</button>
+-          </div>
+-        </div>
+-      </section>
+-
+       <section class="stack">
+         <label for="bulkNamesInput" style="font-size:0.85rem;">Add people (one name per line):</label>
+         <textarea
+@@ -1114,38 +1101,9 @@
+           }
+         }
+ 
+-        function updateHeartbeatIndicator(status) {
+-          const heartbeatEl = document.getElementById('backendHeartbeatStatus')
+-          if (!heartbeatEl) return
+-          const hasBackend = Boolean(currentBackendBaseUrl())
+-          if (!hasBackend) {
+-            heartbeatEl.textContent = ''
+-            heartbeatEl.dataset.status = 'idle'
+-            return
+-          }
+-          if (status === 'checking') {
+-            heartbeatEl.textContent = 'Heartbeat: Checking'
+-            heartbeatEl.dataset.status = 'checking'
+-            return
+-          }
+-          if (status === 'connected') {
+-            heartbeatEl.textContent = 'Heartbeat: Connected'
+-            heartbeatEl.dataset.status = 'connected'
+-            return
+-          }
+-          if (status === 'offline') {
+-            heartbeatEl.textContent = 'Heartbeat: Unreachable'
+-            heartbeatEl.dataset.status = 'unreachable'
+-            return
+-          }
+-          heartbeatEl.textContent = ''
+-          heartbeatEl.dataset.status = 'idle'
+-        }
+-
+         /** @param {'unknown' | 'connected' | 'offline' | 'checking'} status */
+         function updateBackendStatusBadge(status, message) {
+-          const badge = document.getElementById('backendStatusBadge')
+-          const msgEl = document.getElementById('backendStatusMessage')
++          const badge = document.getElementById('backendConfigureButton')
+           if (!badge) return
+           let uiStatus = status
+           if (status === 'offline') {
+@@ -1158,27 +1116,15 @@
+             uiStatus = 'checking'
+           }
+           const labelMap = {
+-            connected: 'Backend: Connected',
+-            unreachable: 'Backend: Unreachable',
+-            checking: 'Backend: Checking',
+-            local: 'Backend: Local',
+-            unknown: 'Backend: Local',
++            connected: 'Backend: Connected 🟢',
++            unreachable: 'Backend: Unreachable 🔴',
++            checking: 'Backend: Checking 🟡',
++            local: 'Backend: Local ⚪',
++            unknown: 'Backend: Local ⚪',
+           }
+-          badge.textContent = labelMap[uiStatus] || 'Backend: Local'
++          badge.textContent = labelMap[uiStatus] || 'Backend: Local ⚪'
+           badge.dataset.status = uiStatus
+-          if (msgEl) {
+-            const defaultMessage =
+-              uiStatus === 'connected'
+-                ? 'Using backend.'
+-                : uiStatus === 'checking'
+-                  ? 'Checking backend connectivity.'
+-                  : uiStatus === 'unreachable'
+-                    ? 'Backend unreachable.'
+-                    : 'Using local-only mode.'
+-            msgEl.textContent = message || defaultMessage
+-          }
+           disableBackendButtons(status !== 'connected')
+-          updateHeartbeatIndicator(status)
+         }
+ 
+         /** @returns {WorkspaceMeta} */
+diff --git a/tests/backend-status.test.js b/tests/backend-status.test.js
+index 0b24eeb..a1084c7 100755
+--- a/tests/backend-status.test.js
++++ b/tests/backend-status.test.js
+@@ -21,14 +21,14 @@ describe('ADR-0009 backend status', () => {
+     const { checkBackendReachability, backendConfig } = hooks
+     expect(typeof checkBackendReachability).toBe('function')
+ 
+-    const badge = dom.window.document.getElementById('backendStatusBadge')
++    const badge = dom.window.document.getElementById('backendConfigureButton')
+     expect(badge).not.toBeNull()
+ 
+     backendConfig.backendUrl = 'https://api.example.com'
+     await checkBackendReachability()
+ 
+     expect(badge.dataset.status).toBe('unreachable')
+-    expect((badge.textContent || '').toLowerCase()).toContain('unreachable')
++    expect(badge.textContent).toBe('Backend: Unreachable 🔴')
+   })
+ 
+   it('loads from backend when connected and workspaceId present', async () => {
+@@ -176,21 +176,19 @@ describe('ADR-0011 backend auto-load and drawer', () => {
+     const dom = createDom()
+     await waitForHooks(dom.window)
+     const drawer = dom.window.document.getElementById('backendDrawer')
+-    const badge = dom.window.document.getElementById('backendStatusBadge')
++    const badge = dom.window.document.getElementById('backendConfigureButton')
+     expect(drawer?.dataset.open).toBe('false')
+     expect((badge?.textContent || '').toLowerCase()).toContain('local')
+   })
+ 
+-  it('places the configure action beneath the status bar', async () => {
++  it('renders the backend pill in the header', async () => {
+     const dom = createDom()
+     await waitForHooks(dom.window)
+-    const statusBar = dom.window.document.querySelector('.backend-status-bar')
+-    const statusMeta = dom.window.document.querySelector('.backend-status-meta')
++    const header = dom.window.document.querySelector('.layout-header')
++    const status = dom.window.document.querySelector('.backend-status')
+     const configure = dom.window.document.getElementById('backendConfigureButton')
+-    expect(statusBar).not.toBeNull()
+-    expect(statusMeta).not.toBeNull()
+-    expect(configure?.parentElement).toBe(statusMeta)
+-    expect(statusBar?.nextElementSibling).toBe(statusMeta)
++    expect(header?.contains(status)).toBe(true)
++    expect(configure?.classList.contains('backend-pill')).toBe(true)
+   })
+ 
+   it('renders backend controls as a popover', async () => {
+@@ -375,16 +373,16 @@ describe('ADR-0011 backend auto-load and drawer', () => {
+ 
+     const reachPromise = hooks.checkBackendReachability()
+ 
+-    const heartbeat = dom.window.document.getElementById('backendHeartbeatStatus')
+-    expect(heartbeat?.dataset.status).toBe('checking')
+-    expect(heartbeat?.textContent).toBe('Heartbeat: Checking')
++    const pill = dom.window.document.getElementById('backendConfigureButton')
++    expect(pill?.dataset.status).toBe('checking')
++    expect(pill?.textContent).toBe('Backend: Checking 🟡')
+ 
+     resolveFetch({ ok: true })
+     const reach = await reachPromise
+ 
+     expect(reach).toBe('connected')
+-    expect(heartbeat?.dataset.status).toBe('connected')
+-    expect(heartbeat?.textContent).toBe('Heartbeat: Connected')
++    expect(pill?.dataset.status).toBe('connected')
++    expect(pill?.textContent).toBe('Backend: Connected 🟢')
+   })
+ 
+   it('shows heartbeat unreachable state after failed check', async () => {
+@@ -396,9 +394,9 @@ describe('ADR-0011 backend auto-load and drawer', () => {
+     const reach = await hooks.checkBackendReachability()
+ 
+     expect(reach).toBe('offline')
+-    const heartbeat = dom.window.document.getElementById('backendHeartbeatStatus')
+-    expect(heartbeat?.dataset.status).toBe('unreachable')
+-    expect(heartbeat?.textContent).toBe('Heartbeat: Unreachable')
++    const pill = dom.window.document.getElementById('backendConfigureButton')
++    expect(pill?.dataset.status).toBe('unreachable')
++    expect(pill?.textContent).toBe('Backend: Unreachable 🔴')
+   })
+ })
+ 

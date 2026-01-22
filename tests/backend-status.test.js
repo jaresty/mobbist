@@ -21,14 +21,14 @@ describe('ADR-0009 backend status', () => {
     const { checkBackendReachability, backendConfig } = hooks
     expect(typeof checkBackendReachability).toBe('function')
 
-    const badge = dom.window.document.getElementById('backendStatusBadge')
+    const badge = dom.window.document.getElementById('backendConfigureButton')
     expect(badge).not.toBeNull()
 
     backendConfig.backendUrl = 'https://api.example.com'
     await checkBackendReachability()
 
     expect(badge.dataset.status).toBe('unreachable')
-    expect((badge.textContent || '').toLowerCase()).toContain('unreachable')
+    expect(badge.textContent).toBe('Backend: Unreachable 🔴')
   })
 
   it('loads from backend when connected and workspaceId present', async () => {
@@ -176,21 +176,19 @@ describe('ADR-0011 backend auto-load and drawer', () => {
     const dom = createDom()
     await waitForHooks(dom.window)
     const drawer = dom.window.document.getElementById('backendDrawer')
-    const badge = dom.window.document.getElementById('backendStatusBadge')
+    const badge = dom.window.document.getElementById('backendConfigureButton')
     expect(drawer?.dataset.open).toBe('false')
     expect((badge?.textContent || '').toLowerCase()).toContain('local')
   })
 
-  it('places the configure action beneath the status bar', async () => {
+  it('renders the backend pill in the header', async () => {
     const dom = createDom()
     await waitForHooks(dom.window)
-    const statusBar = dom.window.document.querySelector('.backend-status-bar')
-    const statusMeta = dom.window.document.querySelector('.backend-status-meta')
+    const header = dom.window.document.querySelector('.layout-header')
+    const status = dom.window.document.querySelector('.backend-status')
     const configure = dom.window.document.getElementById('backendConfigureButton')
-    expect(statusBar).not.toBeNull()
-    expect(statusMeta).not.toBeNull()
-    expect(configure?.parentElement).toBe(statusMeta)
-    expect(statusBar?.nextElementSibling).toBe(statusMeta)
+    expect(header?.contains(status)).toBe(true)
+    expect(configure?.classList.contains('backend-pill')).toBe(true)
   })
 
   it('renders backend controls as a popover', async () => {
@@ -375,16 +373,16 @@ describe('ADR-0011 backend auto-load and drawer', () => {
 
     const reachPromise = hooks.checkBackendReachability()
 
-    const heartbeat = dom.window.document.getElementById('backendHeartbeatStatus')
-    expect(heartbeat?.dataset.status).toBe('checking')
-    expect(heartbeat?.textContent).toBe('Heartbeat: Checking')
+    const pill = dom.window.document.getElementById('backendConfigureButton')
+    expect(pill?.dataset.status).toBe('checking')
+    expect(pill?.textContent).toBe('Backend: Checking 🟡')
 
     resolveFetch({ ok: true })
     const reach = await reachPromise
 
     expect(reach).toBe('connected')
-    expect(heartbeat?.dataset.status).toBe('connected')
-    expect(heartbeat?.textContent).toBe('Heartbeat: Connected')
+    expect(pill?.dataset.status).toBe('connected')
+    expect(pill?.textContent).toBe('Backend: Connected 🟢')
   })
 
   it('shows heartbeat unreachable state after failed check', async () => {
@@ -396,9 +394,9 @@ describe('ADR-0011 backend auto-load and drawer', () => {
     const reach = await hooks.checkBackendReachability()
 
     expect(reach).toBe('offline')
-    const heartbeat = dom.window.document.getElementById('backendHeartbeatStatus')
-    expect(heartbeat?.dataset.status).toBe('unreachable')
-    expect(heartbeat?.textContent).toBe('Heartbeat: Unreachable')
+    const pill = dom.window.document.getElementById('backendConfigureButton')
+    expect(pill?.dataset.status).toBe('unreachable')
+    expect(pill?.textContent).toBe('Backend: Unreachable 🔴')
   })
 })
 

@@ -232,3 +232,28 @@
 - next_work:
   - Behaviour: Log manual backend smoke evidence for localhost run; validate via recorded UI observations.
   - Behaviour: Decide whether to add heartbeat cadence coverage; validate via `npm test` with fake timers.
+
+## loop-11 | 2026-01-22T21:45:20Z | helper:v20251223.1
+- helper_version: helper:v20251223.1
+- focus: ADR-0011 (Decision sections 2-4) – make backend pill the configure control, place it near the header, and embed heartbeat state as an emoji.
+- work_log_updated: `docs/adr/0011-backend-auto-load-and-config-surface.work-log.md` (loop-11)
+- active_constraint: Backend status still reads as a separate control block; pill placement + emoji heartbeat were not enforced by tests, so regressions could restore the prominent bar. `npm test` fails on new guardrails until the layout and copy align.
+- expected_value: Impact=Medium (backend feels optional), Probability=High (layout + copy updates), Time Sensitivity=Low (polish); uncertainty: low after green.
+- validation_targets:
+  - `npm test`
+- mitigation_ladder: 1) add specifying tests for header pill + emoji status; 2) relocate backend status into header; 3) use the pill as the configure action with popover anchored to it.
+- evidence:
+  - red: `docs/adr/evidence/0011/loop-11.md#loop-11-red`
+  - green: `docs/adr/evidence/0011/loop-11.md#loop-11-green`
+  - removal: `docs/adr/evidence/0011/loop-11.md#loop-11-removal`
+- rollback_plan: `git restore --source=HEAD -- index.html tests/backend-status.test.js docs/adr/evidence/0011/loop-11.md` then re-run `npm test` to observe the header pill regression.
+- delta_summary: helper:diff-snapshot=`index.html | 105 insertions(+), 61 deletions(-); tests/backend-status.test.js | 40 insertions(+), 14 deletions(-)`; backend pill now serves as configure action near header with emoji heartbeat; wip preserved at `docs/adr/evidence/0011/loop-11-wip.patch` for removal check.
+- loops_remaining_forecast: 0–1 loops (manual smoke evidence logging or heartbeat cadence coverage); confidence: Medium.
+- residual_constraints:
+  - Heartbeat cadence (30s) is not specified by tests; only state labels are covered. Mitigation: add a timer-based test or contract assertion for the interval. Severity: Medium. Trigger: heartbeat scheduling changes. Owner: `docs/adr/0011-backend-auto-load-and-config-surface.md`.
+  - Manual smoke with live backend is not logged in evidence. Mitigation: capture a manual smoke run transcript in ADR evidence. Severity: Medium. Trigger: backend rollout or API changes. Owner: `docs/adr/0010-backend-contract.md`.
+  - End-to-end backend smoke requires a running backend service outside repo control. Mitigation: keep jsdom/Vitest coverage and run manual smoke when backend is available. Severity: Medium. Trigger: backend endpoint changes or smoke test failures. Owner: `docs/adr/0010-backend-contract.md`.
+  - sendBeacon payload for existing workspaces uses a best-effort `__method` hint; backend may ignore it. Mitigation: evaluate keepalive fetch-only fallback or align backend support; monitor during manual smoke. Severity: Low. Trigger: backend rejects beacon payloads. Owner: `docs/adr/0010-backend-contract.md`.
+- next_work:
+  - Behaviour: Log manual backend smoke evidence for localhost run; validate via recorded UI observations.
+  - Behaviour: Decide whether to add heartbeat cadence coverage; validate via `npm test` with fake timers.
