@@ -1249,10 +1249,6 @@
               setBackendDrawerOpen(true, false)
             }
           }
-          // Update hash if we have a workspaceId
-          if (backendConfig.reachability === 'connected' && workspaceId) {
-            window.location.hash = `${WORKSPACE_HASH_PREFIX}${workspaceId}`
-          }
           return backendConfig.reachability
         }
 
@@ -1300,7 +1296,6 @@
             saveWorkspaceMeta(workspaceMeta)
             backendConfig.backendUrl = buildWorkspaceUrl(baseUrl, data.id)
             saveBackendConfig(backendConfig)
-            window.location.hash = `${WORKSPACE_HASH_PREFIX}${data.id}`
             const backendUrlInput = document.getElementById('backendUrlInput')
             if (backendUrlInput) backendUrlInput.value = backendConfig.backendUrl
             return data.id
@@ -1441,7 +1436,6 @@
               backendConfig.backendUrl = buildWorkspaceUrl(baseUrl, data.id)
               saveBackendConfig(backendConfig)
               if (backendUrlInput) backendUrlInput.value = backendConfig.backendUrl
-              window.location.hash = `${WORKSPACE_HASH_PREFIX}${data.id}`
             }
             dirtySinceServerLoad = false
             backendSaveBlocked = false
@@ -5475,7 +5469,6 @@
                   backendConfig.backendUrl = buildWorkspaceUrl(baseUrl, ensuredId)
                   saveBackendConfig(backendConfig)
                   if (backendUrlInput) backendUrlInput.value = backendConfig.backendUrl
-                  window.location.hash = `${WORKSPACE_HASH_PREFIX}${ensuredId}`
                   disableBackendButtons(false)
                   showToast('Backend connected.')
                   startBackendHeartbeat()

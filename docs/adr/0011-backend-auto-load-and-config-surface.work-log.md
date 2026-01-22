@@ -112,3 +112,27 @@
 - next_work:
   - Behaviour: Add specifying test for 404 disconnect path (cancel) ensuring local-only mode + cleared backend URL; validate via `npm test`.
   - Behaviour: Optional heartbeat status copy polish (checking/unreachable/local) if product language changes; validate via `npm test`.
+
+## loop-6 | 2026-01-22T20:56:20Z | helper:v20251223.1
+- helper_version: helper:v20251223.1
+- focus: ADR-0011 (Decision section 3) – stop mutating the URL hash during backend reachability checks and related config writes.
+- work_log_updated: `docs/adr/0011-backend-auto-load-and-config-surface.work-log.md` (loop-6)
+- active_constraint: Backend reachability updates mutate the URL hash, violating ADR-0011’s no-URL-config rule; `npm test` fails on the new guardrail asserting hash stability.
+- expected_value: Impact=Med (prevents URL from encoding backend state), Probability=High (remove hash writes), Time Sensitivity=Low (policy alignment); uncertainty: low after green.
+- validation_targets:
+  - `npm test`
+- mitigation_ladder: 1) add specifying test for hash stability during checks; 2) remove hash writes in reachability + save/connect flows; 3) review hash hydration on init.
+- evidence:
+  - red: `docs/adr/evidence/0011/loop-6.md#loop-6-red`
+  - green: `docs/adr/evidence/0011/loop-6.md#loop-6-green`
+  - removal: `docs/adr/evidence/0011/loop-6.md#loop-6-removal`
+- rollback_plan: `git restore --source=HEAD -- index.html tests/backend-status.test.js docs/adr/evidence/0011/loop-6.md` then re-run `npm test` to observe the hash mutation regression.
+- delta_summary: helper:diff-snapshot=`index.html | 7 deletions(-); tests/backend-status.test.js | 39 insertions(+)`; removed hash writes on backend checks and added hash-stability coverage; wip preserved at `docs/adr/evidence/0011/loop-6-wip.patch` for removal check.
+- loops_remaining_forecast: 0–1 loops (decide whether to remove hash hydration on init); confidence: Medium.
+- residual_constraints:
+  - Hash hydration on init still accepts URL workspace IDs, which may conflict with Decision 3’s “no URL config” intent. Mitigation: decide policy; add specifying test and remove hydration if required. Severity: Medium. Trigger: ADR review clarifies URL handling. Owner: `docs/adr/0011-backend-auto-load-and-config-surface.md`.
+  - End-to-end backend smoke requires a running backend service outside repo control. Mitigation: keep jsdom/Vitest coverage and run manual smoke when backend is available. Severity: Medium. Trigger: backend endpoint changes or smoke test failures. Owner: `docs/adr/0010-backend-contract.md`.
+  - sendBeacon payload for existing workspaces uses a best-effort `__method` hint; backend may ignore it. Mitigation: evaluate keepalive fetch-only fallback or align backend support; monitor during manual smoke. Severity: Low. Trigger: backend rejects beacon payloads. Owner: `docs/adr/0010-backend-contract.md`.
+- next_work:
+  - Behaviour: Decide whether init should ignore URL hash hydration; validate via `npm test` with a new URL handling guardrail.
+  - Behaviour: Optional heartbeat status copy polish (checking/unreachable/local) if product language changes; validate via `npm test`.

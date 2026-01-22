@@ -266,6 +266,7 @@ describe('ADR-0011 backend auto-load and drawer', () => {
     const fetchMock = vi.fn()
     const confirmMock = vi.fn(() => true)
     const dom = createDom({ fetchMock, confirmMock })
+    dom.window.location.hash = '#/workspace/missing'
     const hooks = await waitForHooks(dom.window)
     hooks.backendConfig.backendUrl = 'https://api.example.com/workspaces/missing'
     hooks.backendConfig.reachability = 'connected'
@@ -292,6 +293,44 @@ describe('ADR-0011 backend auto-load and drawer', () => {
     )
     expect(hooks.workspaceMeta.workspaceId).toBe('new-1')
     expect(hooks.backendConfig.backendUrl).toContain('/workspaces/new-1')
+  })
+
+  it('disconnects to local-only when user declines 404 recovery', async () => {
+    const fetchMock = vi.fn()
+    const confirmMock = vi.fn(() => false)
+    const dom = createDom({ fetchMock, confirmMock })
+    const hooks = await waitForHooks(dom.window)
+    hooks.backendConfig.backendUrl = 'https://api.example.com/workspaces/missing'
+    hooks.backendConfig.reachability = 'connected'
+    hooks.workspaceMeta.workspaceId = 'missing'
+
+    fetchMock.mockResolvedValueOnce({ ok: false, status: 404 })
+
+    const ok = await hooks.loadFromBackend()
+
+    expect(ok).toBe(false)
+    expect(confirmMock).toHaveBeenCalled()
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://api.example.com/workspaces/missing',
+      expect.objectContaining({ method: 'GET' }),
+    )
+    expect(hooks.backendConfig.backendUrl).toBe('')
+    expect(hooks.backendConfig.reachability).toBe('offline')
+    expectLoadSaveDisabled(dom, true)
+    expect(dom.window.location.hash).toBe('')
+  })
+
+  it('does not mutate URL hash on backend reachability checks', async () => {
+    const fetchMock = vi.fn(() => Promise.resolve({ ok: true }))
+    const dom = createDom({ fetchMock })
+    dom.window.location.hash = '#/workspace/keep'
+    const hooks = await waitForHooks(dom.window)
+    hooks.backendConfig.backendUrl = 'https://api.example.com/workspaces/w1'
+
+    const reach = await hooks.checkBackendReachability()
+
+    expect(reach).toBe('connected')
+    expect(dom.window.location.hash).toBe('#/workspace/keep')
   })
 })
 

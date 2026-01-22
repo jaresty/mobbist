@@ -1,0 +1,96 @@
+diff --git a/index.html b/index.html
+index 515e886..19c70ad 100644
+--- a/index.html
++++ b/index.html
+@@ -1249,10 +1249,6 @@
+               setBackendDrawerOpen(true, false)
+             }
+           }
+-          // Update hash if we have a workspaceId
+-          if (backendConfig.reachability === 'connected' && workspaceId) {
+-            window.location.hash = `${WORKSPACE_HASH_PREFIX}${workspaceId}`
+-          }
+           return backendConfig.reachability
+         }
+ 
+@@ -1300,7 +1296,6 @@
+             saveWorkspaceMeta(workspaceMeta)
+             backendConfig.backendUrl = buildWorkspaceUrl(baseUrl, data.id)
+             saveBackendConfig(backendConfig)
+-            window.location.hash = `${WORKSPACE_HASH_PREFIX}${data.id}`
+             const backendUrlInput = document.getElementById('backendUrlInput')
+             if (backendUrlInput) backendUrlInput.value = backendConfig.backendUrl
+             return data.id
+@@ -1441,7 +1436,6 @@
+               backendConfig.backendUrl = buildWorkspaceUrl(baseUrl, data.id)
+               saveBackendConfig(backendConfig)
+               if (backendUrlInput) backendUrlInput.value = backendConfig.backendUrl
+-              window.location.hash = `${WORKSPACE_HASH_PREFIX}${data.id}`
+             }
+             dirtySinceServerLoad = false
+             backendSaveBlocked = false
+@@ -5475,7 +5469,6 @@
+                   backendConfig.backendUrl = buildWorkspaceUrl(baseUrl, ensuredId)
+                   saveBackendConfig(backendConfig)
+                   if (backendUrlInput) backendUrlInput.value = backendConfig.backendUrl
+-                  window.location.hash = `${WORKSPACE_HASH_PREFIX}${ensuredId}`
+                   disableBackendButtons(false)
+                   showToast('Backend connected.')
+                   startBackendHeartbeat()
+diff --git a/tests/backend-status.test.js b/tests/backend-status.test.js
+index 83b1ad2..1f6d678 100755
+--- a/tests/backend-status.test.js
++++ b/tests/backend-status.test.js
+@@ -266,6 +266,7 @@ describe('ADR-0011 backend auto-load and drawer', () => {
+     const fetchMock = vi.fn()
+     const confirmMock = vi.fn(() => true)
+     const dom = createDom({ fetchMock, confirmMock })
++    dom.window.location.hash = '#/workspace/missing'
+     const hooks = await waitForHooks(dom.window)
+     hooks.backendConfig.backendUrl = 'https://api.example.com/workspaces/missing'
+     hooks.backendConfig.reachability = 'connected'
+@@ -293,6 +294,44 @@ describe('ADR-0011 backend auto-load and drawer', () => {
+     expect(hooks.workspaceMeta.workspaceId).toBe('new-1')
+     expect(hooks.backendConfig.backendUrl).toContain('/workspaces/new-1')
+   })
++
++  it('disconnects to local-only when user declines 404 recovery', async () => {
++    const fetchMock = vi.fn()
++    const confirmMock = vi.fn(() => false)
++    const dom = createDom({ fetchMock, confirmMock })
++    const hooks = await waitForHooks(dom.window)
++    hooks.backendConfig.backendUrl = 'https://api.example.com/workspaces/missing'
++    hooks.backendConfig.reachability = 'connected'
++    hooks.workspaceMeta.workspaceId = 'missing'
++
++    fetchMock.mockResolvedValueOnce({ ok: false, status: 404 })
++
++    const ok = await hooks.loadFromBackend()
++
++    expect(ok).toBe(false)
++    expect(confirmMock).toHaveBeenCalled()
++    expect(fetchMock).toHaveBeenCalledWith(
++      'https://api.example.com/workspaces/missing',
++      expect.objectContaining({ method: 'GET' }),
++    )
++    expect(hooks.backendConfig.backendUrl).toBe('')
++    expect(hooks.backendConfig.reachability).toBe('offline')
++    expectLoadSaveDisabled(dom, true)
++    expect(dom.window.location.hash).toBe('')
++  })
++
++  it('does not mutate URL hash on backend reachability checks', async () => {
++    const fetchMock = vi.fn(() => Promise.resolve({ ok: true }))
++    const dom = createDom({ fetchMock })
++    dom.window.location.hash = '#/workspace/keep'
++    const hooks = await waitForHooks(dom.window)
++    hooks.backendConfig.backendUrl = 'https://api.example.com/workspaces/w1'
++
++    const reach = await hooks.checkBackendReachability()
++
++    expect(reach).toBe('connected')
++    expect(dom.window.location.hash).toBe('#/workspace/keep')
++  })
+ })
+ 
+ describe('ADR-0011 autosave and toast behaviour', () => {
