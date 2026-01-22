@@ -1049,7 +1049,16 @@
           if (persist) saveBackendDrawerOpen(open)
         }
 
-        function showToast(message, durationMs = 2500) {
+        let toastTimerId = null
+
+        function showToast(message, options = {}) {
+          const sticky = typeof options === 'object' && options.sticky === true
+          const durationMs =
+            typeof options === 'number'
+              ? options
+              : typeof options.durationMs === 'number'
+                ? options.durationMs
+                : 2500
           let toast = document.getElementById('toast')
           if (!toast) {
             toast = document.createElement('div')
@@ -1059,9 +1068,13 @@
           }
           toast.textContent = message
           toast.classList.add('visible')
-          window.setTimeout(() => {
-            toast.classList.remove('visible')
-          }, durationMs)
+          toast.dataset.sticky = sticky ? 'true' : 'false'
+          if (toastTimerId) window.clearTimeout(toastTimerId)
+          if (!sticky) {
+            toastTimerId = window.setTimeout(() => {
+              toast.classList.remove('visible')
+            }, durationMs)
+          }
         }
 
         function updateHeartbeatIndicator(status) {
@@ -1219,6 +1232,9 @@
               signal: controller.signal,
             })
             backendConfig.reachability = response.ok ? 'connected' : 'offline'
+            if (backendConfig.reachability === 'connected') {
+              backendSaveBlocked = false
+            }
           } catch (err) {
             backendConfig.reachability = 'offline'
           } finally {
@@ -1344,7 +1360,12 @@
         }
 
         async function saveToBackend() {
+          const options = arguments.length && typeof arguments[0] === 'object' ? arguments[0] : {}
+          const reason = options.reason || 'manual'
+          const keepalive = Boolean(options.keepalive)
+          const suppressToast = Boolean(options.suppressToast)
           if (!isBackendEnabled()) return false
+          if (backendSaveBlocked && reason === 'autosave') return false
           const workspaceId = currentWorkspaceId()
           const snapshot = { id: workspaceId, name: 'Workspace', data: state }
           const method = workspaceId ? 'PUT' : 'POST'
@@ -1360,13 +1381,18 @@
                   ? { ...snapshot, clientTempId: workspaceMeta.clientTempId }
                   : snapshot,
               ),
+              keepalive,
             })
             if (!response.ok) {
               console.warn('Backend save failed', response.status)
               backendConfig.reachability = 'offline'
+              backendSaveBlocked = true
               saveBackendConfig(backendConfig)
               updateBackendStatusBadge(backendConfig.reachability, 'Backend save failed; staying local.')
               disableBackendButtons(true)
+              if (!suppressToast) {
+                showToast('Backend save failed.', { sticky: true })
+              }
               return false
             }
             const data = await response.json()
@@ -1380,15 +1406,54 @@
               window.location.hash = `${WORKSPACE_HASH_PREFIX}${data.id}`
             }
             dirtySinceServerLoad = false
+            backendSaveBlocked = false
+            if (!suppressToast) {
+              showToast('Backend saved.', { sticky: false })
+            }
             return true
           } catch (err) {
             console.warn('Backend save error', err)
             backendConfig.reachability = 'offline'
+            backendSaveBlocked = true
             saveBackendConfig(backendConfig)
             updateBackendStatusBadge(backendConfig.reachability, 'Backend save failed; staying local.')
             disableBackendButtons(true)
+            if (!suppressToast) {
+              showToast('Backend save failed.', { sticky: true })
+            }
             return false
           }
+        }
+
+        function attemptBeaconSave(snapshot, baseUrl, workspaceId) {
+          if (!navigator.sendBeacon) return false
+          const payload =
+            workspaceId == null
+              ? { ...snapshot, clientTempId: workspaceMeta.clientTempId }
+              : { ...snapshot, __method: 'PUT' }
+          const url = workspaceId ? `${baseUrl}/workspaces/${workspaceId}` : `${baseUrl}/workspaces`
+          try {
+            return navigator.sendBeacon(url, JSON.stringify(payload))
+          } catch (err) {
+            return false
+          }
+        }
+
+        async function handleBeforeUnload(event) {
+          if (!isBackendEnabled()) return
+          if (!dirtySinceServerLoad) return
+          const workspaceId = currentWorkspaceId()
+          const baseUrl = currentBackendBaseUrl()
+          const snapshot = { id: workspaceId, name: 'Workspace', data: state }
+          if (backendSaveBlocked) {
+            if (event) {
+              if (typeof event.preventDefault === 'function') event.preventDefault()
+              event.returnValue = ''
+            }
+            attemptBeaconSave(snapshot, baseUrl, workspaceId)
+            return
+          }
+          saveToBackend({ reason: 'autosave', keepalive: true, suppressToast: true })
         }
 
         function revertToLocal() {
@@ -1398,6 +1463,7 @@
           saveBackendConfig(backendConfig)
           updateBackendStatusBadge(backendConfig.reachability)
           stopBackendHeartbeat()
+          backendSaveBlocked = false
           setBackendDrawerOpen(false, true)
         }
  
@@ -1797,9 +1863,11 @@
         let undoButtonEl = null
         let redoButtonEl = null
         let historyShortcutBound = false
+        let beforeUnloadBound = false
         let historyOverlayEl = null
         let suppressTenureIndicatorClickUntil = 0
         let dirtySinceServerLoad = false
+        let backendSaveBlocked = false
 
         function createInitialState() {
 
@@ -5288,6 +5356,7 @@
             loadFromBackend,
             saveToBackend,
             revertToLocal,
+            handleBeforeUnload,
             workspaceMeta,
             getState: () => state,
             setState: (next, markDirty = true) => {
@@ -5297,6 +5366,9 @@
             },
             setDirtySinceServerLoad: (value) => {
               dirtySinceServerLoad = Boolean(value)
+            },
+            setBackendSaveBlocked: (value) => {
+              backendSaveBlocked = Boolean(value)
             },
           }
         }
@@ -5445,6 +5517,11 @@
               console.warn('Backend check failed; staying in local mode.', err)
             })
             startBackendHeartbeat()
+          }
+
+          if (!beforeUnloadBound) {
+            window.addEventListener('beforeunload', handleBeforeUnload)
+            beforeUnloadBound = true
           }
 
           undoButtonEl = document.getElementById('undoButton')

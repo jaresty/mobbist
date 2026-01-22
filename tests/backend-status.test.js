@@ -263,6 +263,61 @@ describe('ADR-0011 backend auto-load and drawer', () => {
   })
 })
 
+describe('ADR-0011 autosave and toast behaviour', () => {
+  it('blocks unload when autosave previously failed', async () => {
+    const dom = createDom()
+    const hooks = await waitForHooks(dom.window)
+    hooks.backendConfig.backendUrl = 'https://api.example.com'
+    hooks.backendConfig.reachability = 'connected'
+    hooks.setDirtySinceServerLoad(true)
+    hooks.setBackendSaveBlocked(true)
+
+    const event = { preventDefault: () => {}, returnValue: undefined }
+    await hooks.handleBeforeUnload(event)
+
+    expect(event.returnValue).toBe('')
+    expect(dom.window._sendBeaconMock).toHaveBeenCalled()
+  })
+
+  it('marks failure toast as sticky on save failure', async () => {
+    const fetchMock = vi.fn(() => Promise.reject(new Error('server down')))
+    const dom = createDom({ fetchMock })
+    const hooks = await waitForHooks(dom.window)
+    hooks.backendConfig.backendUrl = 'https://api.example.com'
+    hooks.backendConfig.reachability = 'connected'
+    hooks.workspaceMeta.workspaceId = 'w1'
+
+    const ok = await hooks.saveToBackend()
+    expect(ok).toBe(false)
+
+    const toast = dom.window.document.getElementById('toast')
+    expect(toast).not.toBeNull()
+    expect(toast?.dataset.sticky).toBe('true')
+    expect(toast?.classList.contains('visible')).toBe(true)
+  })
+
+  it('marks success toast as auto-dismiss on save success', async () => {
+    const fetchMock = vi.fn(() =>
+      Promise.resolve({
+        ok: true,
+        json: async () => ({ id: 'w1', name: 'Workspace', data: {} }),
+      }),
+    )
+    const dom = createDom({ fetchMock })
+    const hooks = await waitForHooks(dom.window)
+    hooks.backendConfig.backendUrl = 'https://api.example.com'
+    hooks.backendConfig.reachability = 'connected'
+    hooks.workspaceMeta.workspaceId = 'w1'
+
+    const ok = await hooks.saveToBackend()
+    expect(ok).toBe(true)
+
+    const toast = dom.window.document.getElementById('toast')
+    expect(toast).not.toBeNull()
+    expect(toast?.dataset.sticky).toBe('false')
+  })
+})
+
 function waitForHooks(window, timeoutMs = 2000) {
   const start = Date.now()
   return new Promise((resolve, reject) => {
@@ -297,6 +352,11 @@ function createDom(options = {}) {
         writeText: () => Promise.resolve(),
         readText: () => Promise.resolve(''),
       }
+      window.navigator.sendBeacon = (...args) => {
+        const mock = window._sendBeaconMock
+        return mock(...args)
+      }
+      window._sendBeaconMock = vi.fn(() => true)
       if (backendConfig) {
         window.localStorage.setItem(CONFIG_STORAGE_KEY, JSON.stringify(backendConfig))
       }

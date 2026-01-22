@@ -42,3 +42,26 @@
 - next_work:
   - Behaviour: Implement autosave on unload with confirmation fallback + sendBeacon; validate via new ADR-0011 tests in `npm test`.
   - Behaviour: Add toast success/failure behaviour for backend saves; validate via new ADR-0011 tests in `npm test`.
+
+## loop-3 | 2026-01-22T18:50:33Z | helper:v20251223.1
+- helper_version: helper:v20251223.1
+- focus: ADR-0011 (Decision sections 5-6) – implement autosave on unload and save toast behaviour with specifying tests.
+- work_log_updated: `docs/adr/0011-backend-auto-load-and-config-surface.work-log.md` (loop-3)
+- active_constraint: Autosave + toast behaviour was unimplemented; new ADR-0011 tests failed until autosave handler, save blocking, and toast metadata were added.
+- expected_value: Impact=High (meets unload/save UX), Probability=High (tests + implementation), Time Sensitivity=High (daily workflow); uncertainty: low after green.
+- validation_targets:
+  - `npm test`
+- mitigation_ladder: 1) add specifying autosave/toast tests; 2) implement beforeunload handler + toast metadata; 3) refine autosave retry gating on heartbeat.
+- evidence:
+  - red: `docs/adr/evidence/0011/loop-3.md#loop-3-red`
+  - green: `docs/adr/evidence/0011/loop-3.md#loop-3-green`
+  - removal: `docs/adr/evidence/0011/loop-3.md#loop-3-removal`
+- rollback_plan: `git restore --source=HEAD -- index.html tests/backend-status.test.js docs/adr/evidence/0011/loop-3.md` then re-run `npm test` to observe the red expectation gap.
+- delta_summary: helper:diff-snapshot=`index.html | 85 insertions(+), 4 deletions(-); tests/backend-status.test.js | 60 insertions(+)`; autosave handler + toast metadata added; wip preserved at `docs/adr/evidence/0011/loop-3-wip.patch` for removal check.
+- loops_remaining_forecast: 1 loop (tighten autosave retry gating + heartbeat confirm or polish status copy); confidence: Medium.
+- residual_constraints:
+  - Autosave retry gating relies on heartbeat success only for autosave path; manual saves still attempt even after failure. Mitigation: decide whether to block manual saves or keep manual override; update tests accordingly. Severity: Medium. Trigger: ADR-0011 interpretation changes.
+  - sendBeacon payload for existing workspaces uses a best-effort `__method` hint; backend may ignore it. Mitigation: consider keepalive fetch only or backend support for beacon; monitor with manual smoke. Severity: Low. Trigger: backend rejects beacon payloads.
+- next_work:
+  - Behaviour: Decide manual save behavior when backendSaveBlocked and add specifying tests if needed; validate via `npm test`.
+  - Behaviour: Optional polish for heartbeat status copy (checking/unreachable/local) aligned with product language; validate via updated test expectations.
