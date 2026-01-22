@@ -1,6 +1,6 @@
 # ADR-0011: Backend Auto-Load and Configuration Surface
 
-- Status: Proposed
+- Status: Completed
 - Date: 2026-01-22
 - Owners: Mobbist maintainers
 - Related:

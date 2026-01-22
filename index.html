@@ -5486,7 +5486,7 @@
               workspaceMeta = createDefaultWorkspaceMeta()
               saveWorkspaceMeta(workspaceMeta)
               if (backendUrlInput) backendUrlInput.value = ''
-              alert('Backend disabled. Running in local-only mode.')
+              showToast('Backend disabled. Running in local-only mode.')
             })
           }
 
@@ -5494,15 +5494,23 @@
             loadBackendButton.addEventListener('click', async (ev) => {
               ev.preventDefault()
               const ok = await loadFromBackend()
-              if (!ok) alert('Failed to load from backend. Staying on local data.')
+              if (ok) {
+                showToast('Loaded from backend.')
+              } else {
+                showToast('Failed to load from backend. Staying on local data.', { sticky: true })
+              }
             })
           }
 
           if (saveBackendButton) {
             saveBackendButton.addEventListener('click', async (ev) => {
               ev.preventDefault()
-              const ok = await saveToBackend()
-              if (!ok) alert('Failed to save to backend. Local data is still intact.')
+              const ok = await saveToBackend({ suppressToast: true })
+              if (ok) {
+                showToast('Backend saved.')
+              } else {
+                showToast('Failed to save to backend. Local data is still intact.', { sticky: true })
+              }
             })
           }
 
@@ -5511,15 +5519,15 @@
               ev.preventDefault()
               const url = backendUrlInput ? backendUrlInput.value.trim() : ''
               if (!url) {
-                alert('No backend URL set.')
+                showToast('No backend URL set.', { sticky: true })
                 return
               }
               try {
                 await navigator.clipboard.writeText(url)
-                alert('Backend URL copied to clipboard.')
+                showToast('Backend URL copied to clipboard.')
               } catch (err) {
                 console.warn('Failed to copy backend URL', err)
-                alert('Unable to copy backend URL.')
+                showToast('Unable to copy backend URL.', { sticky: true })
               }
             })
           }
