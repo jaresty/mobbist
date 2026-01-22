@@ -282,3 +282,24 @@
 - next_work:
   - Behaviour: Log manual backend smoke evidence for localhost run; validate via recorded UI observations.
   - Behaviour: Decide whether to add heartbeat cadence coverage; validate via `npm test` with fake timers.
+
+## loop-13 | 2026-01-22T21:59:10Z | helper:v20251223.1
+- helper_version: helper:v20251223.1
+- focus: ADR-0011 (Decision sections 1-6) – capture manual smoke evidence against the live backend at `http://localhost:6967`.
+- work_log_updated: `docs/adr/0011-backend-auto-load-and-config-surface.work-log.md` (loop-13)
+- active_constraint: Live backend smoke evidence was missing, leaving the end-to-end path unverified outside jsdom tests; the manual run must confirm connect/save/load behaviour.
+- expected_value: Impact=Medium (validates live backend path), Probability=High (manual smoke), Time Sensitivity=Med (limits drift between UI and backend); uncertainty: low after evidence.
+- validation_targets:
+  - Manual smoke via Chrome MCP (connect, save, load)
+- mitigation_ladder: 1) run manual backend smoke; 2) record evidence; 3) keep residual constraints updated.
+- evidence:
+  - manual: `docs/adr/evidence/0011/loop-13.md#loop-13-manual-smoke`
+- rollback_plan: N/A (manual evidence only; no repo changes required).
+- delta_summary: helper:diff-snapshot=docs-only; recorded live backend smoke observations in `docs/adr/evidence/0011/loop-13.md`.
+- loops_remaining_forecast: 0–1 loops (heartbeat cadence coverage); confidence: Medium.
+- residual_constraints:
+  - Heartbeat cadence (30s) is not specified by tests; only state labels are covered. Mitigation: add a timer-based test or contract assertion for the interval. Severity: Medium. Trigger: heartbeat scheduling changes. Owner: `docs/adr/0011-backend-auto-load-and-config-surface.md`.
+  - End-to-end backend smoke requires a running backend service outside repo control. Mitigation: keep jsdom/Vitest coverage and run manual smoke when backend is available. Severity: Medium. Trigger: backend endpoint changes or smoke test failures. Owner: `docs/adr/0010-backend-contract.md`.
+  - sendBeacon payload for existing workspaces uses a best-effort `__method` hint; backend may ignore it. Mitigation: evaluate keepalive fetch-only fallback or align backend support; monitor during manual smoke. Severity: Low. Trigger: backend rejects beacon payloads. Owner: `docs/adr/0010-backend-contract.md`.
+- next_work:
+  - Behaviour: Add heartbeat cadence coverage with fake timers; validate via `npm test`.
