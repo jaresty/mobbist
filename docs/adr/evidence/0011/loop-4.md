@@ -24,3 +24,8 @@ AssertionError: expected "vi.fn()" to not be called at all, but actually been ca
 FAIL  tests/backend-status.test.js > ADR-0011 autosave and toast behaviour > blocks manual save until heartbeat clears the save block
 AssertionError: expected "vi.fn()" to not be called at all, but actually been called 1 times
 ```
+
+## loop-4-verify | helper:diff-snapshot
+- green | 2026-01-22T20:40:04Z | exit 0 | `npm test`
+    helper:diff-snapshot=clean
+    behaviour ADR-0011 guardrails remain green after restoring implementation | inline
