@@ -16,6 +16,11 @@ AssertionError: expected "vi.fn()" to not be called at all, but actually been ca
     behaviour ADR-0011 manual save blocked until heartbeat succeeds | inline
 
 ## loop-4-removal | helper:diff-snapshot
-- removal | 2026-01-22T20:28:25Z | exit 0 | `git restore --source=HEAD -- index.html tests/backend-status.test.js && npm test`
-    helper:diff-snapshot=clean
-    behaviour ADR-0011 no longer re-fails after revert because specifying test was removed; keep the test to enforce the guardrail | inline
+- removal | 2026-01-22T20:38:48Z | exit 1 | `git restore --source=fba92eb^ -- index.html && npm test`
+    helper:diff-snapshot=`index.html | 11 insertions(+), 1 deletion(-)`
+    behaviour ADR-0011 manual save blocking re-fails when implementation is reverted but specifying test remains | inline
+
+```
+FAIL  tests/backend-status.test.js > ADR-0011 autosave and toast behaviour > blocks manual save until heartbeat clears the save block
+AssertionError: expected "vi.fn()" to not be called at all, but actually been called 1 times
+```

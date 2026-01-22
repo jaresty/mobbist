@@ -80,7 +80,7 @@
   - green: `docs/adr/evidence/0011/loop-4.md#loop-4-green`
   - removal: `docs/adr/evidence/0011/loop-4.md#loop-4-removal`
 - rollback_plan: `git restore --source=HEAD -- index.html tests/backend-status.test.js docs/adr/evidence/0011/loop-4.md` then re-run `npm test` to observe the guardrail gap.
-- delta_summary: helper:diff-snapshot=`index.html | 11 insertions(+), 1 deletion(-); tests/backend-status.test.js | 28 insertions(+)`; manual saves now respect backendSaveBlocked and heartbeat re-enables save buttons; wip preserved at `docs/adr/evidence/0011/loop-4-wip.patch` for removal check.
+- delta_summary: helper:diff-snapshot=`index.html | 11 insertions(+), 1 deletion(-); tests/backend-status.test.js | 28 insertions(+)`; manual saves now respect backendSaveBlocked and heartbeat re-enables save buttons; removal evidence rerun with implementation-only revert; wip preserved at `docs/adr/evidence/0011/loop-4-wip.patch` for removal check.
 - loops_remaining_forecast: 0–1 loops (optional heartbeat copy polish if product language changes); confidence: Medium.
 - residual_constraints:
   - End-to-end backend smoke requires a running backend service outside repo control. Mitigation: keep jsdom/Vitest coverage and run manual smoke when backend is available. Severity: Medium. Trigger: backend endpoint changes or smoke test failures. Owner: `docs/adr/0010-backend-contract.md`.
