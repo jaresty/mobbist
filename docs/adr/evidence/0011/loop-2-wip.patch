@@ -1,0 +1,588 @@
+diff --git a/index.html b/index.html
+index 5be40ac..cfd7541 100644
+--- a/index.html
++++ b/index.html
+@@ -684,7 +684,7 @@
+         display: flex;
+         flex-direction: column;
+         gap: 6px;
+-        align-items: flex-start;
++        align-items: stretch;
+         padding: 10px 12px;
+         background: #ffffff;
+         border: 1px solid var(--border);
+@@ -692,7 +692,15 @@
+         box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
+       }
+ 
+-      .backend-status-top {
++      .backend-status-bar {
++        display: flex;
++        align-items: center;
++        justify-content: space-between;
++        gap: 12px;
++        flex-wrap: wrap;
++      }
++
++      .backend-status-left {
+         display: flex;
+         align-items: center;
+         gap: 8px;
+@@ -717,18 +725,50 @@
+         border: 1px solid rgba(16, 185, 129, 0.4);
+       }
+ 
+-      .backend-badge[data-status='offline'],
+-      .backend-badge[data-status='unknown'] {
++      .backend-badge[data-status='checking'] {
++        background: rgba(59, 130, 246, 0.12);
++        color: #1d4ed8;
++        border: 1px solid rgba(59, 130, 246, 0.35);
++      }
++
++      .backend-badge[data-status='unreachable'] {
+         background: rgba(239, 68, 68, 0.12);
+         color: #991b1b;
+         border: 1px solid rgba(239, 68, 68, 0.35);
+       }
+ 
++      .backend-badge[data-status='local'],
++      .backend-badge[data-status='unknown'] {
++        background: #e5e7eb;
++        color: #111827;
++        border: 1px solid var(--border);
++      }
++
++      .backend-heartbeat {
++        font-size: 0.7rem;
++        color: var(--muted);
++      }
++
++      .backend-heartbeat[data-status='idle'] {
++        display: none;
++      }
++
+       .backend-status-message {
+         font-size: 0.8rem;
+         color: var(--muted);
+       }
+ 
++      .backend-drawer {
++        display: none;
++        flex-direction: column;
++        gap: 8px;
++        width: 100%;
++      }
++
++      .backend-drawer[data-open='true'] {
++        display: flex;
++      }
++
+       .backend-controls-row {
+         display: flex;
+         flex-wrap: wrap;
+@@ -808,25 +848,30 @@
+       </div>
+ 
+       <section class="backend-status" aria-label="Backend status and settings">
+-        <div class="backend-status-top">
+-          <div id="backendStatusBadge" class="backend-badge" data-status="unknown">Local fallback</div>
+-          <span class="muted" style="font-size:0.85rem;">Backend optional; falls back to local when unreachable.</span>
++        <div class="backend-status-bar">
++          <div class="backend-status-left">
++            <div id="backendStatusBadge" class="backend-badge" data-status="unknown">Backend: Local</div>
++            <div id="backendHeartbeatStatus" class="backend-heartbeat" data-status="idle"></div>
++          </div>
++          <button id="backendConfigureButton" class="ghost">Configure</button>
+         </div>
+         <div id="backendStatusMessage" class="backend-status-message"></div>
+-        <div class="backend-controls-row">
+-          <input
+-            id="backendUrlInput"
+-            type="url"
+-            inputmode="url"
+-            placeholder="https://api.example.com"
+-            aria-label="Backend base URL"
+-          />
+-          <button id="checkBackendButton" class="ghost">Connect &amp; Check</button>
+-          <button id="loadBackendButton" class="ghost">Load from Backend</button>
+-          <button id="saveBackendButton" class="primary">Save to Backend</button>
+-          <button id="revertToLocalButton" class="danger">Switch to Local Only</button>
+-          <button id="copyBackendUrlButton" class="ghost">Copy Backend URL</button>
+-          <button id="retryBackendButton" class="ghost">Retry Backend Connection</button>
++        <div id="backendDrawer" class="backend-drawer" data-open="false" aria-hidden="true">
++          <div class="backend-controls-row">
++            <input
++              id="backendUrlInput"
++              type="url"
++              inputmode="url"
++              placeholder="https://api.example.com"
++              aria-label="Backend base URL"
++            />
++            <button id="checkBackendButton" class="ghost">Connect &amp; Check</button>
++            <button id="loadBackendButton" class="ghost">Load from Backend</button>
++            <button id="saveBackendButton" class="primary">Save to Backend</button>
++            <button id="revertToLocalButton" class="danger">Switch to Local Only</button>
++            <button id="copyBackendUrlButton" class="ghost">Copy Backend URL</button>
++            <button id="retryBackendButton" class="ghost">Retry Backend Connection</button>
++          </div>
+         </div>
+       </section>
+ 
+@@ -876,6 +921,8 @@
+         const CONFIG_STORAGE_KEY = 'mobbist:config:v1'
+         const WORKSPACE_META_KEY = 'mobbist:workspace-meta:v1'
+         const BACKEND_CHECK_TIMEOUT_MS = 4000
++        const BACKEND_HEARTBEAT_MS = 30000
++        const BACKEND_DRAWER_KEY = 'mobbist:backend-drawer:v1'
+         const WORKSPACE_HASH_PREFIX = '#/workspace/'
+         const NEW_TRACK_OPTION_VALUE = '__create_new_track__'
+         const HISTORY_LIMIT = 30
+@@ -978,6 +1025,30 @@
+           if (saveBtn) saveBtn.disabled = disable
+         }
+ 
++        function loadBackendDrawerOpen() {
++          try {
++            return window.localStorage.getItem(BACKEND_DRAWER_KEY) === 'true'
++          } catch (e) {
++            return false
++          }
++        }
++
++        function saveBackendDrawerOpen(open) {
++          try {
++            window.localStorage.setItem(BACKEND_DRAWER_KEY, open ? 'true' : 'false')
++          } catch (e) {
++            console.warn('Failed to save backend drawer state.', e)
++          }
++        }
++
++        function setBackendDrawerOpen(open, persist = true) {
++          const drawer = document.getElementById('backendDrawer')
++          if (!drawer) return
++          drawer.dataset.open = open ? 'true' : 'false'
++          drawer.setAttribute('aria-hidden', open ? 'false' : 'true')
++          if (persist) saveBackendDrawerOpen(open)
++        }
++
+         function showToast(message, durationMs = 2500) {
+           let toast = document.getElementById('toast')
+           if (!toast) {
+@@ -993,17 +1064,71 @@
+           }, durationMs)
+         }
+ 
+-        /** @param {'unknown' | 'connected' | 'offline'} status */
++        function updateHeartbeatIndicator(status) {
++          const heartbeatEl = document.getElementById('backendHeartbeatStatus')
++          if (!heartbeatEl) return
++          const hasBackend = Boolean(currentBackendBaseUrl())
++          if (!hasBackend) {
++            heartbeatEl.textContent = ''
++            heartbeatEl.dataset.status = 'idle'
++            return
++          }
++          if (status === 'checking') {
++            heartbeatEl.textContent = 'Checking...'
++            heartbeatEl.dataset.status = 'checking'
++            return
++          }
++          if (status === 'connected') {
++            heartbeatEl.textContent = 'Heartbeat: ok'
++            heartbeatEl.dataset.status = 'connected'
++            return
++          }
++          if (status === 'offline') {
++            heartbeatEl.textContent = 'Heartbeat: unreachable'
++            heartbeatEl.dataset.status = 'unreachable'
++            return
++          }
++          heartbeatEl.textContent = ''
++          heartbeatEl.dataset.status = 'idle'
++        }
++
++        /** @param {'unknown' | 'connected' | 'offline' | 'checking'} status */
+         function updateBackendStatusBadge(status, message) {
+           const badge = document.getElementById('backendStatusBadge')
+           const msgEl = document.getElementById('backendStatusMessage')
+           if (!badge) return
+-          badge.textContent = status === 'connected' ? 'Backend connected' : 'Local fallback'
+-          badge.dataset.status = status
++          let uiStatus = status
++          if (status === 'offline') {
++            uiStatus = backendConfig.backendUrl ? 'unreachable' : 'local'
++          }
++          if (status === 'unknown') {
++            uiStatus = backendConfig.backendUrl ? 'unreachable' : 'local'
++          }
++          if (status === 'checking') {
++            uiStatus = 'checking'
++          }
++          const labelMap = {
++            connected: 'Backend: Connected',
++            unreachable: 'Backend: Unreachable',
++            checking: 'Backend: Checking',
++            local: 'Backend: Local',
++            unknown: 'Backend: Local',
++          }
++          badge.textContent = labelMap[uiStatus] || 'Backend: Local'
++          badge.dataset.status = uiStatus
+           if (msgEl) {
+-            msgEl.textContent = message || (status === 'connected' ? 'Using backend.' : 'Using local-only mode.')
++            const defaultMessage =
++              uiStatus === 'connected'
++                ? 'Using backend.'
++                : uiStatus === 'checking'
++                  ? 'Checking backend connectivity.'
++                  : uiStatus === 'unreachable'
++                    ? 'Backend unreachable.'
++                    : 'Using local-only mode.'
++            msgEl.textContent = message || defaultMessage
+           }
+-          disableBackendButtons(status === 'offline')
++          disableBackendButtons(status !== 'connected')
++          updateHeartbeatIndicator(status)
+         }
+ 
+         /** @returns {WorkspaceMeta} */
+@@ -1056,6 +1181,23 @@
+           return baseUrl && backendConfig.reachability === 'connected'
+         }
+ 
++        let backendHeartbeatId = null
++
++        function startBackendHeartbeat(intervalMs = BACKEND_HEARTBEAT_MS) {
++          if (!backendConfig.backendUrl) return
++          if (backendHeartbeatId) window.clearInterval(backendHeartbeatId)
++          backendHeartbeatId = window.setInterval(() => {
++            checkBackendReachability().catch((err) => {
++              console.warn('Backend heartbeat failed', err)
++            })
++          }, intervalMs)
++        }
++
++        function stopBackendHeartbeat() {
++          if (backendHeartbeatId) window.clearInterval(backendHeartbeatId)
++          backendHeartbeatId = null
++        }
++
+         async function checkBackendReachability() {
+           const { baseUrl, workspaceId } = parseBackendUrl(backendConfig.backendUrl)
+           if (!baseUrl) {
+@@ -1063,9 +1205,11 @@
+             backendConfig.lastCheckedAt = Date.now()
+             saveBackendConfig(backendConfig)
+             updateBackendStatusBadge(backendConfig.reachability)
++            stopBackendHeartbeat()
+             return backendConfig.reachability
+           }
+ 
++          updateBackendStatusBadge('checking')
+           const controller = new AbortController()
+           const timeoutId = window.setTimeout(() => controller.abort(), BACKEND_CHECK_TIMEOUT_MS)
+           try {
+@@ -1082,6 +1226,9 @@
+             backendConfig.lastCheckedAt = Date.now()
+             saveBackendConfig(backendConfig)
+             updateBackendStatusBadge(backendConfig.reachability)
++            if (backendConfig.reachability === 'offline' && backendConfig.backendUrl) {
++              setBackendDrawerOpen(true, false)
++            }
+           }
+           // Update hash if we have a workspaceId
+           if (backendConfig.reachability === 'connected' && workspaceId) {
+@@ -1090,6 +1237,20 @@
+           return backendConfig.reachability
+         }
+ 
++        async function autoConnectAndLoad() {
++          if (!backendConfig.backendUrl) return false
++          const reachability = await checkBackendReachability()
++          if (reachability !== 'connected') {
++            if (backendConfig.backendUrl) setBackendDrawerOpen(true, false)
++            return false
++          }
++          const baseUrl = currentBackendBaseUrl()
++          if (!baseUrl) return false
++          const ensuredId = await ensureWorkspaceId(baseUrl)
++          if (!ensuredId) return false
++          return loadFromBackend()
++        }
++
+         async function ensureWorkspaceId(baseUrl) {
+           if (workspaceMeta.workspaceId) return workspaceMeta.workspaceId
+           try {
+@@ -1236,6 +1397,8 @@
+           backendConfig.lastCheckedAt = Date.now()
+           saveBackendConfig(backendConfig)
+           updateBackendStatusBadge(backendConfig.reachability)
++          stopBackendHeartbeat()
++          setBackendDrawerOpen(false, true)
+         }
+  
+  
+@@ -5145,6 +5308,8 @@
+           historyAnnouncerEl = document.getElementById('historyAnnouncer')
+ 
+           const backendUrlInput = document.getElementById('backendUrlInput')
++          const backendConfigureButton = document.getElementById('backendConfigureButton')
++          const backendDrawer = document.getElementById('backendDrawer')
+           const checkBackendButton = document.getElementById('checkBackendButton')
+           const loadBackendButton = document.getElementById('loadBackendButton')
+           const saveBackendButton = document.getElementById('saveBackendButton')
+@@ -5173,6 +5338,19 @@
+             })
+           }
+ 
++          if (backendDrawer) {
++            const shouldOpen = backendConfig.backendUrl ? loadBackendDrawerOpen() : false
++            setBackendDrawerOpen(shouldOpen, false)
++          }
++
++          if (backendConfigureButton) {
++            backendConfigureButton.addEventListener('click', (ev) => {
++              ev.preventDefault()
++              const isOpen = backendDrawer?.dataset.open === 'true'
++              setBackendDrawerOpen(!isOpen, true)
++            })
++          }
++
+           if (checkBackendButton) {
+             checkBackendButton.addEventListener('click', async (ev) => {
+               ev.preventDefault()
+@@ -5190,8 +5368,10 @@
+                   window.location.hash = `${WORKSPACE_HASH_PREFIX}${ensuredId}`
+                   disableBackendButtons(false)
+                   showToast('Backend connected.')
++                  startBackendHeartbeat()
+                 }
+               } else {
++                if (backendConfig.backendUrl) setBackendDrawerOpen(true, false)
+                 disableBackendButtons(true)
+                 showToast('Backend unreachable; staying local.')
+               }
+@@ -5254,15 +5434,17 @@
+               if (backendConfig.reachability === 'connected') {
+                 showToast('Backend reachable.')
+               } else {
++                if (backendConfig.backendUrl) setBackendDrawerOpen(true, false)
+                 showToast('Backend still unreachable.')
+               }
+             })
+           }
+ 
+           if (backendConfig.backendUrl) {
+-            checkBackendReachability().catch((err) => {
++            autoConnectAndLoad().catch((err) => {
+               console.warn('Backend check failed; staying in local mode.', err)
+             })
++            startBackendHeartbeat()
+           }
+ 
+           undoButtonEl = document.getElementById('undoButton')
+diff --git a/tests/backend-status.test.js b/tests/backend-status.test.js
+index 257fc7a..7440df8 100755
+--- a/tests/backend-status.test.js
++++ b/tests/backend-status.test.js
+@@ -5,32 +5,15 @@ import { JSDOM } from 'jsdom'
+ 
+ const HTML_PATH = path.join(__dirname, '..', 'index.html')
+ const html = fs.readFileSync(HTML_PATH, 'utf8')
++const CONFIG_STORAGE_KEY = 'mobbist:config:v1'
++const WORKSPACE_META_KEY = 'mobbist:workspace-meta:v1'
+ 
+ describe('ADR-0009 backend status', () => {
+   /** @type {import('jsdom').JSDOM} */
+   let dom
+ 
+   beforeEach(() => {
+-    const fetchMock = vi.fn(() => Promise.reject(new Error('offline')))
+-    const confirmMock = vi.fn(() => true)
+-    dom = new JSDOM(html, {
+-      url: 'https://app.mobbist.test/',
+-      runScripts: 'dangerously',
+-      resources: 'usable',
+-      pretendToBeVisual: true,
+-      beforeParse(window) {
+-        window.fetch = (...args) => fetchMock(...args)
+-        window.alert = () => {}
+-        window.confirm = (...args) => confirmMock(...args)
+-        window.prompt = () => ''
+-        window.navigator.clipboard = {
+-          writeText: () => Promise.resolve(),
+-          readText: () => Promise.resolve(''),
+-        }
+-      },
+-    })
+-    dom.window._fetchMock = fetchMock
+-    dom.window._confirmMock = confirmMock
++    dom = createDom()
+   })
+ 
+   it('shows offline/local fallback when backend is unreachable', async () => {
+@@ -44,8 +27,8 @@ describe('ADR-0009 backend status', () => {
+     backendConfig.backendUrl = 'https://api.example.com'
+     await checkBackendReachability()
+ 
+-    expect(badge.dataset.status).toBe('offline')
+-    expect((badge.textContent || '').toLowerCase()).toContain('local fallback')
++    expect(badge.dataset.status).toBe('unreachable')
++    expect((badge.textContent || '').toLowerCase()).toContain('unreachable')
+   })
+ 
+   it('loads from backend when connected and workspaceId present', async () => {
+@@ -188,6 +171,98 @@ describe('ADR-0009 backend status', () => {
+   })
+ })
+ 
++describe('ADR-0011 backend auto-load and drawer', () => {
++  it('keeps the drawer closed when no backend URL is configured', async () => {
++    const dom = createDom()
++    await waitForHooks(dom.window)
++    const drawer = dom.window.document.getElementById('backendDrawer')
++    const badge = dom.window.document.getElementById('backendStatusBadge')
++    expect(drawer?.dataset.open).toBe('false')
++    expect((badge?.textContent || '').toLowerCase()).toContain('local')
++  })
++
++  it('auto-connects and loads from backend on startup', async () => {
++    const fetchMock = vi.fn()
++    const sampleState = {
++      people: [{ id: 'p1', name: 'Auto' }],
++      roles: [],
++      tracks: [
++        {
++          id: 'on_deck',
++          name: 'On Deck',
++          type: 'on_deck',
++          capacity: null,
++          personIds: [],
++          roleIds: [],
++          locked: false,
++        },
++        {
++          id: 'out_of_office',
++          name: 'Out of Office',
++          type: 'out_of_office',
++          capacity: null,
++          personIds: [],
++          roleIds: [],
++          locked: false,
++        },
++        {
++          id: 'track-1',
++          name: 'Track A',
++          type: 'normal',
++          capacity: 2,
++          personIds: [],
++          roleIds: [],
++          locked: false,
++        },
++      ],
++      nextPersonId: 2,
++      nextTrackId: 2,
++      nextRoleId: 1,
++      defaultTrackCapacity: 2,
++      tenure: {
++        assignments: {},
++        overrides: {},
++        config: { softDays: 2, hardDays: 4 },
++      },
++    }
++
++    fetchMock.mockResolvedValueOnce({
++      ok: true,
++      json: async () => ({ supportsWorkspaces: true }),
++    })
++    fetchMock.mockResolvedValueOnce({
++      ok: true,
++      json: async () => ({ id: 'w1', name: 'Workspace', data: sampleState }),
++    })
++    fetchMock.mockResolvedValueOnce({
++      ok: true,
++      json: async () => ({ id: 'w1', name: 'Workspace', data: sampleState }),
++    })
++
++    const dom = createDom({
++      fetchMock,
++      backendConfig: { backendUrl: 'https://api.example.com', reachability: 'unknown', lastCheckedAt: null },
++      workspaceMeta: { workspaceId: null, clientTempId: 'temp-abc', persisted: false },
++    })
++
++    const hooks = await waitForHooks(dom.window)
++    await waitForFetchCalls(fetchMock, 3)
++    expect(fetchMock).toHaveBeenCalledWith(
++      'https://api.example.com/capabilities',
++      expect.objectContaining({ method: 'GET' }),
++    )
++    expect(fetchMock).toHaveBeenCalledWith(
++      'https://api.example.com/workspaces',
++      expect.objectContaining({ method: 'POST' }),
++    )
++    expect(fetchMock).toHaveBeenCalledWith(
++      'https://api.example.com/workspaces/w1',
++      expect.objectContaining({ method: 'GET' }),
++    )
++    expect(hooks.getState().people[0].name).toBe('Auto')
++  })
++})
++
+ function waitForHooks(window, timeoutMs = 2000) {
+   const start = Date.now()
+   return new Promise((resolve, reject) => {
+@@ -200,6 +275,54 @@ function waitForHooks(window, timeoutMs = 2000) {
+   })
+ }
+ 
++function createDom(options = {}) {
++  const {
++    fetchMock = vi.fn(() => Promise.reject(new Error('offline'))),
++    confirmMock = vi.fn(() => true),
++    backendConfig = null,
++    workspaceMeta = null,
++  } = options
++
++  const dom = new JSDOM(html, {
++    url: 'https://app.mobbist.test/',
++    runScripts: 'dangerously',
++    resources: 'usable',
++    pretendToBeVisual: true,
++    beforeParse(window) {
++      window.fetch = (...args) => fetchMock(...args)
++      window.alert = () => {}
++      window.confirm = (...args) => confirmMock(...args)
++      window.prompt = () => ''
++      window.navigator.clipboard = {
++        writeText: () => Promise.resolve(),
++        readText: () => Promise.resolve(''),
++      }
++      if (backendConfig) {
++        window.localStorage.setItem(CONFIG_STORAGE_KEY, JSON.stringify(backendConfig))
++      }
++      if (workspaceMeta) {
++        window.localStorage.setItem(WORKSPACE_META_KEY, JSON.stringify(workspaceMeta))
++      }
++    },
++  })
++
++  dom.window._fetchMock = fetchMock
++  dom.window._confirmMock = confirmMock
++  return dom
++}
++
++function waitForFetchCalls(fetchMock, count, timeoutMs = 2000) {
++  const start = Date.now()
++  return new Promise((resolve, reject) => {
++    const check = () => {
++      if (fetchMock.mock.calls.length >= count) return resolve()
++      if (Date.now() - start > timeoutMs) return reject(new Error('fetch calls did not reach target'))
++      setTimeout(check, 25)
++    }
++    check()
++  })
++}
++
+ function expectLoadSaveDisabled(dom, disabled) {
+   const loadBtn = dom.window.document.getElementById('loadBackendButton')
+   const saveBtn = dom.window.document.getElementById('saveBackendButton')

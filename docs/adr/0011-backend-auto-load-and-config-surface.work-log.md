@@ -19,3 +19,26 @@
 - next_work:
   - Behaviour: Add jsdom/Vitest validation harness for ADR-0011 auto-load/heartbeat/drawer/autosave flows; validate via `npm test`; future-shaping action: codify heartbeat/auto-load expectations in tests.
   - Behaviour: Implement auto-load + heartbeat status transitions + compact backend drawer UI; validate via `npm test` with mocked fetch.
+
+## loop-2 | 2026-01-22T18:41:04Z | helper:v20251223.1
+- helper_version: helper:v20251223.1
+- focus: ADR-0011 (Decision sections 1-4) – add specifying tests and implement auto-load, drawer surface, and heartbeat status.
+- work_log_updated: `docs/adr/0011-backend-auto-load-and-config-surface.work-log.md` (loop-2)
+- active_constraint: ADR-0011 auto-load and backend drawer behaviour were unimplemented; `npm test` failed on new ADR-0011 expectations until UI/state logic landed.
+- expected_value: Impact=High (core UX flow), Probability=High (tests + implementation), Time Sensitivity=High (blocks daily use); uncertainty: low after green.
+- validation_targets:
+  - `npm test`
+- mitigation_ladder: 1) add specifying ADR-0011 tests; 2) implement drawer + auto-load + heartbeat status; 3) implement autosave + toast behaviour.
+- evidence:
+  - red: `docs/adr/evidence/0011/loop-2.md#loop-2-red`
+  - green: `docs/adr/evidence/0011/loop-2.md#loop-2-green`
+  - removal: `docs/adr/evidence/0011/loop-2.md#loop-2-removal`
+- rollback_plan: `git restore --source=HEAD -- index.html tests/backend-status.test.js docs/adr/evidence/0011/loop-2.md` then re-run `npm test` to observe the red expectation gap.
+- delta_summary: helper:diff-snapshot=`index.html | 236 insertions(+), 32 deletions(-); tests/backend-status.test.js | 167 insertions(+), 17 deletions(-)`; added specifying ADR-0011 tests and implemented compact backend drawer, auto-connect/load, and heartbeat status; wip preserved at `docs/adr/evidence/0011/loop-2-wip.patch` for removal check.
+- loops_remaining_forecast: 1–2 loops (autosave on unload + toast/error handling + heartbeat UI polish); confidence: Medium.
+- residual_constraints:
+  - Autosave on unload and toast dismissal logic not implemented yet. Mitigation: add specifying tests for autosave and toast persistence; implement and validate. Severity: Medium. Trigger: ADR-0011 autosave acceptance criteria still unmet.
+  - End-to-end backend smoke requires a running backend service outside repo control. Mitigation: keep jsdom/Vitest coverage and run manual smoke when backend is available. Severity: Medium. Trigger: backend endpoint changes or smoke test failures. Owner: `docs/adr/0010-backend-contract.md`.
+- next_work:
+  - Behaviour: Implement autosave on unload with confirmation fallback + sendBeacon; validate via new ADR-0011 tests in `npm test`.
+  - Behaviour: Add toast success/failure behaviour for backend saves; validate via new ADR-0011 tests in `npm test`.

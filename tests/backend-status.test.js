@@ -5,32 +5,15 @@ import { JSDOM } from 'jsdom'
 
 const HTML_PATH = path.join(__dirname, '..', 'index.html')
 const html = fs.readFileSync(HTML_PATH, 'utf8')
+const CONFIG_STORAGE_KEY = 'mobbist:config:v1'
+const WORKSPACE_META_KEY = 'mobbist:workspace-meta:v1'
 
 describe('ADR-0009 backend status', () => {
   /** @type {import('jsdom').JSDOM} */
   let dom
 
   beforeEach(() => {
-    const fetchMock = vi.fn(() => Promise.reject(new Error('offline')))
-    const confirmMock = vi.fn(() => true)
-    dom = new JSDOM(html, {
-      url: 'https://app.mobbist.test/',
-      runScripts: 'dangerously',
-      resources: 'usable',
-      pretendToBeVisual: true,
-      beforeParse(window) {
-        window.fetch = (...args) => fetchMock(...args)
-        window.alert = () => {}
-        window.confirm = (...args) => confirmMock(...args)
-        window.prompt = () => ''
-        window.navigator.clipboard = {
-          writeText: () => Promise.resolve(),
-          readText: () => Promise.resolve(''),
-        }
-      },
-    })
-    dom.window._fetchMock = fetchMock
-    dom.window._confirmMock = confirmMock
+    dom = createDom()
   })
 
   it('shows offline/local fallback when backend is unreachable', async () => {
@@ -44,8 +27,8 @@ describe('ADR-0009 backend status', () => {
     backendConfig.backendUrl = 'https://api.example.com'
     await checkBackendReachability()
 
-    expect(badge.dataset.status).toBe('offline')
-    expect((badge.textContent || '').toLowerCase()).toContain('local fallback')
+    expect(badge.dataset.status).toBe('unreachable')
+    expect((badge.textContent || '').toLowerCase()).toContain('unreachable')
   })
 
   it('loads from backend when connected and workspaceId present', async () => {
@@ -188,12 +171,152 @@ describe('ADR-0009 backend status', () => {
   })
 })
 
+describe('ADR-0011 backend auto-load and drawer', () => {
+  it('keeps the drawer closed when no backend URL is configured', async () => {
+    const dom = createDom()
+    await waitForHooks(dom.window)
+    const drawer = dom.window.document.getElementById('backendDrawer')
+    const badge = dom.window.document.getElementById('backendStatusBadge')
+    expect(drawer?.dataset.open).toBe('false')
+    expect((badge?.textContent || '').toLowerCase()).toContain('local')
+  })
+
+  it('auto-connects and loads from backend on startup', async () => {
+    const fetchMock = vi.fn()
+    const sampleState = {
+      people: [{ id: 'p1', name: 'Auto' }],
+      roles: [],
+      tracks: [
+        {
+          id: 'on_deck',
+          name: 'On Deck',
+          type: 'on_deck',
+          capacity: null,
+          personIds: [],
+          roleIds: [],
+          locked: false,
+        },
+        {
+          id: 'out_of_office',
+          name: 'Out of Office',
+          type: 'out_of_office',
+          capacity: null,
+          personIds: [],
+          roleIds: [],
+          locked: false,
+        },
+        {
+          id: 'track-1',
+          name: 'Track A',
+          type: 'normal',
+          capacity: 2,
+          personIds: [],
+          roleIds: [],
+          locked: false,
+        },
+      ],
+      nextPersonId: 2,
+      nextTrackId: 2,
+      nextRoleId: 1,
+      defaultTrackCapacity: 2,
+      tenure: {
+        assignments: {},
+        overrides: {},
+        config: { softDays: 2, hardDays: 4 },
+      },
+    }
+
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ supportsWorkspaces: true }),
+    })
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ id: 'w1', name: 'Workspace', data: sampleState }),
+    })
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ id: 'w1', name: 'Workspace', data: sampleState }),
+    })
+
+    const dom = createDom({
+      fetchMock,
+      backendConfig: { backendUrl: 'https://api.example.com', reachability: 'unknown', lastCheckedAt: null },
+      workspaceMeta: { workspaceId: null, clientTempId: 'temp-abc', persisted: false },
+    })
+
+    const hooks = await waitForHooks(dom.window)
+    await waitForFetchCalls(fetchMock, 3)
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://api.example.com/capabilities',
+      expect.objectContaining({ method: 'GET' }),
+    )
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://api.example.com/workspaces',
+      expect.objectContaining({ method: 'POST' }),
+    )
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://api.example.com/workspaces/w1',
+      expect.objectContaining({ method: 'GET' }),
+    )
+    expect(hooks.getState().people[0].name).toBe('Auto')
+  })
+})
+
 function waitForHooks(window, timeoutMs = 2000) {
   const start = Date.now()
   return new Promise((resolve, reject) => {
     const check = () => {
       if (window.__mobbistTestHooks) return resolve(window.__mobbistTestHooks)
       if (Date.now() - start > timeoutMs) return reject(new Error('test hooks not exposed'))
+      setTimeout(check, 25)
+    }
+    check()
+  })
+}
+
+function createDom(options = {}) {
+  const {
+    fetchMock = vi.fn(() => Promise.reject(new Error('offline'))),
+    confirmMock = vi.fn(() => true),
+    backendConfig = null,
+    workspaceMeta = null,
+  } = options
+
+  const dom = new JSDOM(html, {
+    url: 'https://app.mobbist.test/',
+    runScripts: 'dangerously',
+    resources: 'usable',
+    pretendToBeVisual: true,
+    beforeParse(window) {
+      window.fetch = (...args) => fetchMock(...args)
+      window.alert = () => {}
+      window.confirm = (...args) => confirmMock(...args)
+      window.prompt = () => ''
+      window.navigator.clipboard = {
+        writeText: () => Promise.resolve(),
+        readText: () => Promise.resolve(''),
+      }
+      if (backendConfig) {
+        window.localStorage.setItem(CONFIG_STORAGE_KEY, JSON.stringify(backendConfig))
+      }
+      if (workspaceMeta) {
+        window.localStorage.setItem(WORKSPACE_META_KEY, JSON.stringify(workspaceMeta))
+      }
+    },
+  })
+
+  dom.window._fetchMock = fetchMock
+  dom.window._confirmMock = confirmMock
+  return dom
+}
+
+function waitForFetchCalls(fetchMock, count, timeoutMs = 2000) {
+  const start = Date.now()
+  return new Promise((resolve, reject) => {
+    const check = () => {
+      if (fetchMock.mock.calls.length >= count) return resolve()
+      if (Date.now() - start > timeoutMs) return reject(new Error('fetch calls did not reach target'))
       setTimeout(check, 25)
     }
     check()

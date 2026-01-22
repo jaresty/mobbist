@@ -684,7 +684,7 @@
         display: flex;
         flex-direction: column;
         gap: 6px;
-        align-items: flex-start;
+        align-items: stretch;
         padding: 10px 12px;
         background: #ffffff;
         border: 1px solid var(--border);
@@ -692,7 +692,15 @@
         box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
       }
 
-      .backend-status-top {
+      .backend-status-bar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        flex-wrap: wrap;
+      }
+
+      .backend-status-left {
         display: flex;
         align-items: center;
         gap: 8px;
@@ -717,16 +725,48 @@
         border: 1px solid rgba(16, 185, 129, 0.4);
       }
 
-      .backend-badge[data-status='offline'],
-      .backend-badge[data-status='unknown'] {
+      .backend-badge[data-status='checking'] {
+        background: rgba(59, 130, 246, 0.12);
+        color: #1d4ed8;
+        border: 1px solid rgba(59, 130, 246, 0.35);
+      }
+
+      .backend-badge[data-status='unreachable'] {
         background: rgba(239, 68, 68, 0.12);
         color: #991b1b;
         border: 1px solid rgba(239, 68, 68, 0.35);
       }
 
+      .backend-badge[data-status='local'],
+      .backend-badge[data-status='unknown'] {
+        background: #e5e7eb;
+        color: #111827;
+        border: 1px solid var(--border);
+      }
+
+      .backend-heartbeat {
+        font-size: 0.7rem;
+        color: var(--muted);
+      }
+
+      .backend-heartbeat[data-status='idle'] {
+        display: none;
+      }
+
       .backend-status-message {
         font-size: 0.8rem;
         color: var(--muted);
+      }
+
+      .backend-drawer {
+        display: none;
+        flex-direction: column;
+        gap: 8px;
+        width: 100%;
+      }
+
+      .backend-drawer[data-open='true'] {
+        display: flex;
       }
 
       .backend-controls-row {
@@ -808,25 +848,30 @@
       </div>
 
       <section class="backend-status" aria-label="Backend status and settings">
-        <div class="backend-status-top">
-          <div id="backendStatusBadge" class="backend-badge" data-status="unknown">Local fallback</div>
-          <span class="muted" style="font-size:0.85rem;">Backend optional; falls back to local when unreachable.</span>
+        <div class="backend-status-bar">
+          <div class="backend-status-left">
+            <div id="backendStatusBadge" class="backend-badge" data-status="unknown">Backend: Local</div>
+            <div id="backendHeartbeatStatus" class="backend-heartbeat" data-status="idle"></div>
+          </div>
+          <button id="backendConfigureButton" class="ghost">Configure</button>
         </div>
         <div id="backendStatusMessage" class="backend-status-message"></div>
-        <div class="backend-controls-row">
-          <input
-            id="backendUrlInput"
-            type="url"
-            inputmode="url"
-            placeholder="https://api.example.com"
-            aria-label="Backend base URL"
-          />
-          <button id="checkBackendButton" class="ghost">Connect &amp; Check</button>
-          <button id="loadBackendButton" class="ghost">Load from Backend</button>
-          <button id="saveBackendButton" class="primary">Save to Backend</button>
-          <button id="revertToLocalButton" class="danger">Switch to Local Only</button>
-          <button id="copyBackendUrlButton" class="ghost">Copy Backend URL</button>
-          <button id="retryBackendButton" class="ghost">Retry Backend Connection</button>
+        <div id="backendDrawer" class="backend-drawer" data-open="false" aria-hidden="true">
+          <div class="backend-controls-row">
+            <input
+              id="backendUrlInput"
+              type="url"
+              inputmode="url"
+              placeholder="https://api.example.com"
+              aria-label="Backend base URL"
+            />
+            <button id="checkBackendButton" class="ghost">Connect &amp; Check</button>
+            <button id="loadBackendButton" class="ghost">Load from Backend</button>
+            <button id="saveBackendButton" class="primary">Save to Backend</button>
+            <button id="revertToLocalButton" class="danger">Switch to Local Only</button>
+            <button id="copyBackendUrlButton" class="ghost">Copy Backend URL</button>
+            <button id="retryBackendButton" class="ghost">Retry Backend Connection</button>
+          </div>
         </div>
       </section>
 
@@ -876,6 +921,8 @@
         const CONFIG_STORAGE_KEY = 'mobbist:config:v1'
         const WORKSPACE_META_KEY = 'mobbist:workspace-meta:v1'
         const BACKEND_CHECK_TIMEOUT_MS = 4000
+        const BACKEND_HEARTBEAT_MS = 30000
+        const BACKEND_DRAWER_KEY = 'mobbist:backend-drawer:v1'
         const WORKSPACE_HASH_PREFIX = '#/workspace/'
         const NEW_TRACK_OPTION_VALUE = '__create_new_track__'
         const HISTORY_LIMIT = 30
@@ -978,6 +1025,30 @@
           if (saveBtn) saveBtn.disabled = disable
         }
 
+        function loadBackendDrawerOpen() {
+          try {
+            return window.localStorage.getItem(BACKEND_DRAWER_KEY) === 'true'
+          } catch (e) {
+            return false
+          }
+        }
+
+        function saveBackendDrawerOpen(open) {
+          try {
+            window.localStorage.setItem(BACKEND_DRAWER_KEY, open ? 'true' : 'false')
+          } catch (e) {
+            console.warn('Failed to save backend drawer state.', e)
+          }
+        }
+
+        function setBackendDrawerOpen(open, persist = true) {
+          const drawer = document.getElementById('backendDrawer')
+          if (!drawer) return
+          drawer.dataset.open = open ? 'true' : 'false'
+          drawer.setAttribute('aria-hidden', open ? 'false' : 'true')
+          if (persist) saveBackendDrawerOpen(open)
+        }
+
         function showToast(message, durationMs = 2500) {
           let toast = document.getElementById('toast')
           if (!toast) {
@@ -993,17 +1064,71 @@
           }, durationMs)
         }
 
-        /** @param {'unknown' | 'connected' | 'offline'} status */
+        function updateHeartbeatIndicator(status) {
+          const heartbeatEl = document.getElementById('backendHeartbeatStatus')
+          if (!heartbeatEl) return
+          const hasBackend = Boolean(currentBackendBaseUrl())
+          if (!hasBackend) {
+            heartbeatEl.textContent = ''
+            heartbeatEl.dataset.status = 'idle'
+            return
+          }
+          if (status === 'checking') {
+            heartbeatEl.textContent = 'Checking...'
+            heartbeatEl.dataset.status = 'checking'
+            return
+          }
+          if (status === 'connected') {
+            heartbeatEl.textContent = 'Heartbeat: ok'
+            heartbeatEl.dataset.status = 'connected'
+            return
+          }
+          if (status === 'offline') {
+            heartbeatEl.textContent = 'Heartbeat: unreachable'
+            heartbeatEl.dataset.status = 'unreachable'
+            return
+          }
+          heartbeatEl.textContent = ''
+          heartbeatEl.dataset.status = 'idle'
+        }
+
+        /** @param {'unknown' | 'connected' | 'offline' | 'checking'} status */
         function updateBackendStatusBadge(status, message) {
           const badge = document.getElementById('backendStatusBadge')
           const msgEl = document.getElementById('backendStatusMessage')
           if (!badge) return
-          badge.textContent = status === 'connected' ? 'Backend connected' : 'Local fallback'
-          badge.dataset.status = status
-          if (msgEl) {
-            msgEl.textContent = message || (status === 'connected' ? 'Using backend.' : 'Using local-only mode.')
+          let uiStatus = status
+          if (status === 'offline') {
+            uiStatus = backendConfig.backendUrl ? 'unreachable' : 'local'
           }
-          disableBackendButtons(status === 'offline')
+          if (status === 'unknown') {
+            uiStatus = backendConfig.backendUrl ? 'unreachable' : 'local'
+          }
+          if (status === 'checking') {
+            uiStatus = 'checking'
+          }
+          const labelMap = {
+            connected: 'Backend: Connected',
+            unreachable: 'Backend: Unreachable',
+            checking: 'Backend: Checking',
+            local: 'Backend: Local',
+            unknown: 'Backend: Local',
+          }
+          badge.textContent = labelMap[uiStatus] || 'Backend: Local'
+          badge.dataset.status = uiStatus
+          if (msgEl) {
+            const defaultMessage =
+              uiStatus === 'connected'
+                ? 'Using backend.'
+                : uiStatus === 'checking'
+                  ? 'Checking backend connectivity.'
+                  : uiStatus === 'unreachable'
+                    ? 'Backend unreachable.'
+                    : 'Using local-only mode.'
+            msgEl.textContent = message || defaultMessage
+          }
+          disableBackendButtons(status !== 'connected')
+          updateHeartbeatIndicator(status)
         }
 
         /** @returns {WorkspaceMeta} */
@@ -1056,6 +1181,23 @@
           return baseUrl && backendConfig.reachability === 'connected'
         }
 
+        let backendHeartbeatId = null
+
+        function startBackendHeartbeat(intervalMs = BACKEND_HEARTBEAT_MS) {
+          if (!backendConfig.backendUrl) return
+          if (backendHeartbeatId) window.clearInterval(backendHeartbeatId)
+          backendHeartbeatId = window.setInterval(() => {
+            checkBackendReachability().catch((err) => {
+              console.warn('Backend heartbeat failed', err)
+            })
+          }, intervalMs)
+        }
+
+        function stopBackendHeartbeat() {
+          if (backendHeartbeatId) window.clearInterval(backendHeartbeatId)
+          backendHeartbeatId = null
+        }
+
         async function checkBackendReachability() {
           const { baseUrl, workspaceId } = parseBackendUrl(backendConfig.backendUrl)
           if (!baseUrl) {
@@ -1063,9 +1205,11 @@
             backendConfig.lastCheckedAt = Date.now()
             saveBackendConfig(backendConfig)
             updateBackendStatusBadge(backendConfig.reachability)
+            stopBackendHeartbeat()
             return backendConfig.reachability
           }
 
+          updateBackendStatusBadge('checking')
           const controller = new AbortController()
           const timeoutId = window.setTimeout(() => controller.abort(), BACKEND_CHECK_TIMEOUT_MS)
           try {
@@ -1082,12 +1226,29 @@
             backendConfig.lastCheckedAt = Date.now()
             saveBackendConfig(backendConfig)
             updateBackendStatusBadge(backendConfig.reachability)
+            if (backendConfig.reachability === 'offline' && backendConfig.backendUrl) {
+              setBackendDrawerOpen(true, false)
+            }
           }
           // Update hash if we have a workspaceId
           if (backendConfig.reachability === 'connected' && workspaceId) {
             window.location.hash = `${WORKSPACE_HASH_PREFIX}${workspaceId}`
           }
           return backendConfig.reachability
+        }
+
+        async function autoConnectAndLoad() {
+          if (!backendConfig.backendUrl) return false
+          const reachability = await checkBackendReachability()
+          if (reachability !== 'connected') {
+            if (backendConfig.backendUrl) setBackendDrawerOpen(true, false)
+            return false
+          }
+          const baseUrl = currentBackendBaseUrl()
+          if (!baseUrl) return false
+          const ensuredId = await ensureWorkspaceId(baseUrl)
+          if (!ensuredId) return false
+          return loadFromBackend()
         }
 
         async function ensureWorkspaceId(baseUrl) {
@@ -1236,6 +1397,8 @@
           backendConfig.lastCheckedAt = Date.now()
           saveBackendConfig(backendConfig)
           updateBackendStatusBadge(backendConfig.reachability)
+          stopBackendHeartbeat()
+          setBackendDrawerOpen(false, true)
         }
  
  
@@ -5145,6 +5308,8 @@
           historyAnnouncerEl = document.getElementById('historyAnnouncer')
 
           const backendUrlInput = document.getElementById('backendUrlInput')
+          const backendConfigureButton = document.getElementById('backendConfigureButton')
+          const backendDrawer = document.getElementById('backendDrawer')
           const checkBackendButton = document.getElementById('checkBackendButton')
           const loadBackendButton = document.getElementById('loadBackendButton')
           const saveBackendButton = document.getElementById('saveBackendButton')
@@ -5173,6 +5338,19 @@
             })
           }
 
+          if (backendDrawer) {
+            const shouldOpen = backendConfig.backendUrl ? loadBackendDrawerOpen() : false
+            setBackendDrawerOpen(shouldOpen, false)
+          }
+
+          if (backendConfigureButton) {
+            backendConfigureButton.addEventListener('click', (ev) => {
+              ev.preventDefault()
+              const isOpen = backendDrawer?.dataset.open === 'true'
+              setBackendDrawerOpen(!isOpen, true)
+            })
+          }
+
           if (checkBackendButton) {
             checkBackendButton.addEventListener('click', async (ev) => {
               ev.preventDefault()
@@ -5190,8 +5368,10 @@
                   window.location.hash = `${WORKSPACE_HASH_PREFIX}${ensuredId}`
                   disableBackendButtons(false)
                   showToast('Backend connected.')
+                  startBackendHeartbeat()
                 }
               } else {
+                if (backendConfig.backendUrl) setBackendDrawerOpen(true, false)
                 disableBackendButtons(true)
                 showToast('Backend unreachable; staying local.')
               }
@@ -5254,15 +5434,17 @@
               if (backendConfig.reachability === 'connected') {
                 showToast('Backend reachable.')
               } else {
+                if (backendConfig.backendUrl) setBackendDrawerOpen(true, false)
                 showToast('Backend still unreachable.')
               }
             })
           }
 
           if (backendConfig.backendUrl) {
-            checkBackendReachability().catch((err) => {
+            autoConnectAndLoad().catch((err) => {
               console.warn('Backend check failed; staying in local mode.', err)
             })
+            startBackendHeartbeat()
           }
 
           undoButtonEl = document.getElementById('undoButton')
