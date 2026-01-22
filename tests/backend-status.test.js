@@ -287,6 +287,34 @@ describe('ADR-0011 backend auto-load and drawer', () => {
     expect(hooks.getState().people[0].name).toBe('Auto')
   })
 
+  it('prompts and loads when Connect & Check targets an existing workspace', async () => {
+    const fetchMock = vi.fn()
+    const confirmMock = vi.fn(() => true)
+    const dom = createDom({ fetchMock, confirmMock })
+    const hooks = await waitForHooks(dom.window)
+    const sampleState = { ...hooks.getState(), people: [{ id: 'p1', name: 'Loaded' }] }
+
+    const status = {
+      ok: true,
+      json: async () => ({ id: 'w1', name: 'Workspace', data: sampleState }),
+    }
+
+    fetchMock
+      .mockResolvedValueOnce({ ok: true }) // capabilities
+      .mockResolvedValueOnce(status) // load workspace
+
+    const urlInput = dom.window.document.getElementById('backendUrlInput')
+    if (urlInput) urlInput.value = 'https://api.example.com/workspaces/w1'
+
+    const connectButton = dom.window.document.getElementById('checkBackendButton')
+    connectButton?.dispatchEvent(new dom.window.Event('click'))
+
+    await waitForFetchCalls(fetchMock, 2)
+
+    expect(confirmMock).toHaveBeenCalled()
+    expect(hooks.getState().people[0].name).toBe('Loaded')
+  })
+
   it('recreates missing workspace when backend returns 404', async () => {
     const fetchMock = vi.fn()
     const confirmMock = vi.fn(() => true)

@@ -325,3 +325,25 @@
   - sendBeacon payload for existing workspaces uses a best-effort `__method` hint; backend may ignore it. Mitigation: evaluate keepalive fetch-only fallback or align backend support; monitor during manual smoke. Severity: Low. Trigger: backend rejects beacon payloads. Owner: `docs/adr/0010-backend-contract.md`.
 - next_work:
   - Behaviour: Run periodic manual backend smoke when backend API changes; validate via recorded UI observations.
+
+## loop-15 | 2026-01-22T22:19:20Z | helper:v20251223.1
+- helper_version: helper:v20251223.1
+- focus: ADR-0011 (Decision sections 1-3) – prompt and auto-load when Connect & Check targets an existing backend workspace.
+- work_log_updated: `docs/adr/0011-backend-auto-load-and-config-surface.work-log.md` (loop-15)
+- active_constraint: Connect & Check does not prompt or load when a workspace URL is provided; `npm test` fails on the new guardrail until the click handler performs the confirm + load path.
+- expected_value: Impact=Medium (restores expected backend handoff), Probability=High (handler update + test), Time Sensitivity=Low (workflow polish); uncertainty: low after green.
+- validation_targets:
+  - `npm test`
+- mitigation_ladder: 1) add specifying test for prompt + load on Connect & Check; 2) branch on workspaceId to confirm + load; 3) keep backend connected even if user declines load.
+- evidence:
+  - red: `docs/adr/evidence/0011/loop-15.md#loop-15-red`
+  - green: `docs/adr/evidence/0011/loop-15.md#loop-15-green`
+  - removal: `docs/adr/evidence/0011/loop-15.md#loop-15-removal`
+- rollback_plan: `git show HEAD:index.html > index.html` then re-run `npm test` to observe the Connect & Check regression.
+- delta_summary: helper:diff-snapshot=`index.html | 15 insertions(+), 1 deletion(-); tests/backend-status.test.js | 28 insertions(+)`; Connect & Check now prompts and loads existing workspaces; wip preserved at `docs/adr/evidence/0011/loop-15-wip.patch` for removal check.
+- loops_remaining_forecast: 0 loops (ADR-0011 behaviour coverage complete); confidence: High.
+- residual_constraints:
+  - End-to-end backend smoke relies on a live service outside repo control. Mitigation: re-run manual smoke on backend API changes and attach evidence; last manual run recorded in loop-13. Severity: Medium. Trigger: backend endpoint changes or smoke failures. Owner: `docs/adr/0010-backend-contract.md`.
+  - sendBeacon payload for existing workspaces uses a best-effort `__method` hint; backend may ignore it. Mitigation: confirm backend support during periodic smoke and consider fetch-only fallback. Severity: Low. Trigger: backend rejects beacon payloads. Owner: `docs/adr/0010-backend-contract.md`.
+- next_work:
+  - Behaviour: Run periodic manual backend smoke when backend API changes; validate via recorded UI observations.

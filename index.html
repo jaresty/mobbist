@@ -5445,7 +5445,20 @@
               const reach = await checkBackendReachability()
               if (reach === 'connected') {
                 const { baseUrl, workspaceId } = parseBackendUrl(backendConfig.backendUrl)
-                const ensuredId = workspaceId || (baseUrl ? await ensureWorkspaceId(baseUrl) : null)
+                if (workspaceId) {
+                  disableBackendButtons(false)
+                  showToast('Backend connected.')
+                  startBackendHeartbeat()
+                  const shouldLoad = window.confirm(
+                    'Workspace found on the backend. Load it now and replace the local plan?',
+                  )
+                  if (shouldLoad) {
+                    const ok = await loadFromBackend()
+                    if (!ok) alert('Failed to load from backend. Staying on local data.')
+                  }
+                  return
+                }
+                const ensuredId = baseUrl ? await ensureWorkspaceId(baseUrl) : null
                 if (ensuredId) {
                   backendConfig.backendUrl = buildWorkspaceUrl(baseUrl, ensuredId)
                   saveBackendConfig(backendConfig)

@@ -1,0 +1,65 @@
+diff --git a/index.html b/index.html
+index 5b5ebef..145590c 100644
+--- a/index.html
++++ b/index.html
+@@ -5445,7 +5445,20 @@
+               const reach = await checkBackendReachability()
+               if (reach === 'connected') {
+                 const { baseUrl, workspaceId } = parseBackendUrl(backendConfig.backendUrl)
+-                const ensuredId = workspaceId || (baseUrl ? await ensureWorkspaceId(baseUrl) : null)
++                if (workspaceId) {
++                  disableBackendButtons(false)
++                  showToast('Backend connected.')
++                  startBackendHeartbeat()
++                  const shouldLoad = window.confirm(
++                    'Workspace found on the backend. Load it now and replace the local plan?',
++                  )
++                  if (shouldLoad) {
++                    const ok = await loadFromBackend()
++                    if (!ok) alert('Failed to load from backend. Staying on local data.')
++                  }
++                  return
++                }
++                const ensuredId = baseUrl ? await ensureWorkspaceId(baseUrl) : null
+                 if (ensuredId) {
+                   backendConfig.backendUrl = buildWorkspaceUrl(baseUrl, ensuredId)
+                   saveBackendConfig(backendConfig)
+diff --git a/tests/backend-status.test.js b/tests/backend-status.test.js
+index daa148d..97bdfb9 100755
+--- a/tests/backend-status.test.js
++++ b/tests/backend-status.test.js
+@@ -287,6 +287,34 @@ describe('ADR-0011 backend auto-load and drawer', () => {
+     expect(hooks.getState().people[0].name).toBe('Auto')
+   })
+ 
++  it('prompts and loads when Connect & Check targets an existing workspace', async () => {
++    const fetchMock = vi.fn()
++    const confirmMock = vi.fn(() => true)
++    const dom = createDom({ fetchMock, confirmMock })
++    const hooks = await waitForHooks(dom.window)
++    const sampleState = { ...hooks.getState(), people: [{ id: 'p1', name: 'Loaded' }] }
++
++    const status = {
++      ok: true,
++      json: async () => ({ id: 'w1', name: 'Workspace', data: sampleState }),
++    }
++
++    fetchMock
++      .mockResolvedValueOnce({ ok: true }) // capabilities
++      .mockResolvedValueOnce(status) // load workspace
++
++    const urlInput = dom.window.document.getElementById('backendUrlInput')
++    if (urlInput) urlInput.value = 'https://api.example.com/workspaces/w1'
++
++    const connectButton = dom.window.document.getElementById('checkBackendButton')
++    connectButton?.dispatchEvent(new dom.window.Event('click'))
++
++    await waitForFetchCalls(fetchMock, 2)
++
++    expect(confirmMock).toHaveBeenCalled()
++    expect(hooks.getState().people[0].name).toBe('Loaded')
++  })
++
+   it('recreates missing workspace when backend returns 404', async () => {
+     const fetchMock = vi.fn()
+     const confirmMock = vi.fn(() => true)
