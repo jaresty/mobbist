@@ -1,6 +1,6 @@
 # ADR-0010: Backend Contract for Mobbist SPA
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-01-21
 - Owners: Backend/SPA maintainers
 - Related:
