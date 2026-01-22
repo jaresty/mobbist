@@ -136,3 +136,25 @@
 - next_work:
   - Behaviour: Decide whether init should ignore URL hash hydration; validate via `npm test` with a new URL handling guardrail.
   - Behaviour: Optional heartbeat status copy polish (checking/unreachable/local) if product language changes; validate via `npm test`.
+
+## loop-7 | 2026-01-22T21:00:00Z | helper:v20251223.1
+- helper_version: helper:v20251223.1
+- focus: ADR-0011 (Decision section 3) – ignore workspace hash hydration on init to keep backend configuration out of the URL.
+- work_log_updated: `docs/adr/0011-backend-auto-load-and-config-surface.work-log.md` (loop-7)
+- active_constraint: Initial URL hash hydration still injects backend workspace IDs, contradicting Decision 3; `npm test` fails on the new guardrail requiring hash to be ignored on init.
+- expected_value: Impact=Med (aligns URL handling with ADR), Probability=High (remove hydration block), Time Sensitivity=Low (policy alignment); uncertainty: low after green.
+- validation_targets:
+  - `npm test`
+- mitigation_ladder: 1) add specifying test for ignoring hash hydration; 2) remove hash hydration block in init; 3) verify no URL mutation remains.
+- evidence:
+  - red: `docs/adr/evidence/0011/loop-7.md#loop-7-red`
+  - green: `docs/adr/evidence/0011/loop-7.md#loop-7-green`
+  - removal: `docs/adr/evidence/0011/loop-7.md#loop-7-removal`
+- rollback_plan: `git restore --source=HEAD -- index.html tests/backend-status.test.js docs/adr/evidence/0011/loop-7.md` then re-run `npm test` to observe the hash hydration regression.
+- delta_summary: helper:diff-snapshot=`index.html | 13 deletions(-), 1 insertion(+); tests/backend-status.test.js | 10 insertions(+)`; removed init hash hydration and added a guardrail test; wip preserved at `docs/adr/evidence/0011/loop-7-wip.patch` for removal check.
+- loops_remaining_forecast: 0–1 loops (heartbeat copy polish if desired); confidence: High.
+- residual_constraints:
+  - End-to-end backend smoke requires a running backend service outside repo control. Mitigation: keep jsdom/Vitest coverage and run manual smoke when backend is available. Severity: Medium. Trigger: backend endpoint changes or smoke test failures. Owner: `docs/adr/0010-backend-contract.md`.
+  - sendBeacon payload for existing workspaces uses a best-effort `__method` hint; backend may ignore it. Mitigation: evaluate keepalive fetch-only fallback or align backend support; monitor during manual smoke. Severity: Low. Trigger: backend rejects beacon payloads. Owner: `docs/adr/0010-backend-contract.md`.
+- next_work:
+  - Behaviour: Optional heartbeat status copy polish (checking/unreachable/local) if product language changes; validate via `npm test`.

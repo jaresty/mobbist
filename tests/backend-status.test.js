@@ -332,6 +332,16 @@ describe('ADR-0011 backend auto-load and drawer', () => {
     expect(reach).toBe('connected')
     expect(dom.window.location.hash).toBe('#/workspace/keep')
   })
+
+  it('ignores workspace hash hydration on init', async () => {
+    const dom = createDom()
+    dom.window.location.hash = '#/workspace/from-url'
+
+    const hooks = await waitForHooks(dom.window)
+
+    expect(hooks.backendConfig.backendUrl).toBe('')
+    expect(hooks.workspaceMeta.workspaceId).toBeNull()
+  })
 })
 
 describe('ADR-0011 autosave and toast behaviour', () => {

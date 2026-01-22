@@ -1,0 +1,46 @@
+diff --git a/index.html b/index.html
+index 19c70ad..9cf74cf 100644
+--- a/index.html
++++ b/index.html
+@@ -5421,19 +5421,7 @@
+           const copyBackendUrlButton = document.getElementById('copyBackendUrlButton')
+           const retryBackendButton = document.getElementById('retryBackendButton')
+ 
+-          // hydrate from hash if present
+-          if (window.location.hash && window.location.hash.startsWith(WORKSPACE_HASH_PREFIX)) {
+-            const hashId = window.location.hash.slice(WORKSPACE_HASH_PREFIX.length)
+-            if (hashId) {
+-              workspaceMeta.workspaceId = hashId
+-              saveWorkspaceMeta(workspaceMeta)
+-              const parsed = parseBackendUrl(backendConfig.backendUrl)
+-              if (parsed.baseUrl && !parsed.workspaceId) {
+-                backendConfig.backendUrl = buildWorkspaceUrl(parsed.baseUrl, hashId)
+-                saveBackendConfig(backendConfig)
+-              }
+-            }
+-          }
++          // no URL-driven backend hydration per ADR-0011 (Decision section 3)
+ 
+           if (backendUrlInput) {
+             backendUrlInput.value = backendConfig.backendUrl || ''
+diff --git a/tests/backend-status.test.js b/tests/backend-status.test.js
+index 1f6d678..d58784a 100755
+--- a/tests/backend-status.test.js
++++ b/tests/backend-status.test.js
+@@ -332,6 +332,16 @@ describe('ADR-0011 backend auto-load and drawer', () => {
+     expect(reach).toBe('connected')
+     expect(dom.window.location.hash).toBe('#/workspace/keep')
+   })
++
++  it('ignores workspace hash hydration on init', async () => {
++    const dom = createDom()
++    dom.window.location.hash = '#/workspace/from-url'
++
++    const hooks = await waitForHooks(dom.window)
++
++    expect(hooks.backendConfig.backendUrl).toBe('')
++    expect(hooks.workspaceMeta.workspaceId).toBeNull()
++  })
+ })
+ 
+ describe('ADR-0011 autosave and toast behaviour', () => {

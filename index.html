@@ -5421,19 +5421,7 @@
           const copyBackendUrlButton = document.getElementById('copyBackendUrlButton')
           const retryBackendButton = document.getElementById('retryBackendButton')
 
-          // hydrate from hash if present
-          if (window.location.hash && window.location.hash.startsWith(WORKSPACE_HASH_PREFIX)) {
-            const hashId = window.location.hash.slice(WORKSPACE_HASH_PREFIX.length)
-            if (hashId) {
-              workspaceMeta.workspaceId = hashId
-              saveWorkspaceMeta(workspaceMeta)
-              const parsed = parseBackendUrl(backendConfig.backendUrl)
-              if (parsed.baseUrl && !parsed.workspaceId) {
-                backendConfig.backendUrl = buildWorkspaceUrl(parsed.baseUrl, hashId)
-                saveBackendConfig(backendConfig)
-              }
-            }
-          }
+          // no URL-driven backend hydration per ADR-0011 (Decision section 3)
 
           if (backendUrlInput) {
             backendUrlInput.value = backendConfig.backendUrl || ''
