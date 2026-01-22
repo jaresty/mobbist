@@ -65,3 +65,26 @@
 - next_work:
   - Behaviour: Decide manual save behavior when backendSaveBlocked and add specifying tests if needed; validate via `npm test`.
   - Behaviour: Optional polish for heartbeat status copy (checking/unreachable/local) aligned with product language; validate via updated test expectations.
+
+## loop-4 | 2026-01-22T20:29:10Z | helper:v20251223.1
+- helper_version: helper:v20251223.1
+- focus: ADR-0011 (Decision section 5) – block manual saves while backendSaveBlocked and re-enable saves after heartbeat clears.
+- work_log_updated: `docs/adr/0011-backend-auto-load-and-config-surface.work-log.md` (loop-4)
+- active_constraint: Manual saves still hit the backend even when backendSaveBlocked is true; `npm test` fails on the new ADR-0011 guardrail that expects no fetch until heartbeat returns connected.
+- expected_value: Impact=High (honors ADR-0011 save gating), Probability=High (local guard + heartbeat reset), Time Sensitivity=Med (prevents repeated failures); uncertainty: low after green.
+- validation_targets:
+  - `npm test`
+- mitigation_ladder: 1) add specifying test for manual save blocking + heartbeat recovery; 2) gate saveToBackend for all reasons while blocked; 3) re-enable save buttons when heartbeat returns connected.
+- evidence:
+  - red: `docs/adr/evidence/0011/loop-4.md#loop-4-red`
+  - green: `docs/adr/evidence/0011/loop-4.md#loop-4-green`
+  - removal: `docs/adr/evidence/0011/loop-4.md#loop-4-removal`
+- rollback_plan: `git restore --source=HEAD -- index.html tests/backend-status.test.js docs/adr/evidence/0011/loop-4.md` then re-run `npm test` to observe the guardrail gap.
+- delta_summary: helper:diff-snapshot=`index.html | 11 insertions(+), 1 deletion(-); tests/backend-status.test.js | 28 insertions(+)`; manual saves now respect backendSaveBlocked and heartbeat re-enables save buttons; wip preserved at `docs/adr/evidence/0011/loop-4-wip.patch` for removal check.
+- loops_remaining_forecast: 0–1 loops (optional heartbeat copy polish if product language changes); confidence: Medium.
+- residual_constraints:
+  - End-to-end backend smoke requires a running backend service outside repo control. Mitigation: keep jsdom/Vitest coverage and run manual smoke when backend is available. Severity: Medium. Trigger: backend endpoint changes or smoke test failures. Owner: `docs/adr/0010-backend-contract.md`.
+  - sendBeacon payload for existing workspaces uses a best-effort `__method` hint; backend may ignore it. Mitigation: evaluate keepalive fetch-only fallback or align backend support; monitor during manual smoke. Severity: Low. Trigger: backend rejects beacon payloads. Owner: `docs/adr/0010-backend-contract.md`.
+  - Optional heartbeat copy tweaks for checking/unreachable/local language. Mitigation: align with product voice when copy guidance lands; update tests accordingly. Severity: Low. Trigger: UX copy review feedback. Owner: `docs/adr/0011-backend-auto-load-and-config-surface.md`.
+- next_work:
+  - Behaviour: Optional heartbeat status copy polish (checking/unreachable/local) if product language changes; validate via `npm test`.

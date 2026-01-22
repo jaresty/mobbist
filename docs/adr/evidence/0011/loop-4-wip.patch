@@ -1,0 +1,68 @@
+diff --git a/index.html b/index.html
+index 050047c..2b931a3 100644
+--- a/index.html
++++ b/index.html
+@@ -1242,6 +1242,9 @@
+             backendConfig.lastCheckedAt = Date.now()
+             saveBackendConfig(backendConfig)
+             updateBackendStatusBadge(backendConfig.reachability)
++            if (backendConfig.backendUrl) {
++              disableBackendButtons(backendConfig.reachability !== 'connected')
++            }
+             if (backendConfig.reachability === 'offline' && backendConfig.backendUrl) {
+               setBackendDrawerOpen(true, false)
+             }
+@@ -1365,7 +1368,13 @@
+           const keepalive = Boolean(options.keepalive)
+           const suppressToast = Boolean(options.suppressToast)
+           if (!isBackendEnabled()) return false
+-          if (backendSaveBlocked && reason === 'autosave') return false
++          if (backendSaveBlocked) {
++            disableBackendButtons(true)
++            if (reason !== 'autosave' && !suppressToast) {
++              showToast('Backend save blocked until heartbeat succeeds.', { sticky: true })
++            }
++            return false
++          }
+           const workspaceId = currentWorkspaceId()
+           const snapshot = { id: workspaceId, name: 'Workspace', data: state }
+           const method = workspaceId ? 'PUT' : 'POST'
+diff --git a/tests/backend-status.test.js b/tests/backend-status.test.js
+index b4d3e98..bb7b291 100755
+--- a/tests/backend-status.test.js
++++ b/tests/backend-status.test.js
+@@ -316,6 +316,34 @@ describe('ADR-0011 autosave and toast behaviour', () => {
+     expect(toast).not.toBeNull()
+     expect(toast?.dataset.sticky).toBe('false')
+   })
++
++  it('blocks manual save until heartbeat clears the save block', async () => {
++    const fetchMock = vi.fn()
++    const dom = createDom({ fetchMock })
++    const hooks = await waitForHooks(dom.window)
++    hooks.backendConfig.backendUrl = 'https://api.example.com'
++    hooks.backendConfig.reachability = 'connected'
++    hooks.workspaceMeta.workspaceId = 'w1'
++    hooks.setBackendSaveBlocked(true)
++
++    const ok = await hooks.saveToBackend()
++    expect(ok).toBe(false)
++    expect(fetchMock).not.toHaveBeenCalled()
++
++    fetchMock.mockResolvedValueOnce({ ok: true })
++    await hooks.checkBackendReachability()
++
++    fetchMock.mockResolvedValueOnce({
++      ok: true,
++      json: async () => ({ id: 'w1', name: 'Workspace', data: hooks.getState() }),
++    })
++    const ok2 = await hooks.saveToBackend()
++    expect(ok2).toBe(true)
++    expect(fetchMock).toHaveBeenCalledWith(
++      'https://api.example.com/workspaces/w1',
++      expect.objectContaining({ method: 'PUT' }),
++    )
++  })
+ })
+ 
+ function waitForHooks(window, timeoutMs = 2000) {

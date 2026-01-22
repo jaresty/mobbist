@@ -316,6 +316,34 @@ describe('ADR-0011 autosave and toast behaviour', () => {
     expect(toast).not.toBeNull()
     expect(toast?.dataset.sticky).toBe('false')
   })
+
+  it('blocks manual save until heartbeat clears the save block', async () => {
+    const fetchMock = vi.fn()
+    const dom = createDom({ fetchMock })
+    const hooks = await waitForHooks(dom.window)
+    hooks.backendConfig.backendUrl = 'https://api.example.com'
+    hooks.backendConfig.reachability = 'connected'
+    hooks.workspaceMeta.workspaceId = 'w1'
+    hooks.setBackendSaveBlocked(true)
+
+    const ok = await hooks.saveToBackend()
+    expect(ok).toBe(false)
+    expect(fetchMock).not.toHaveBeenCalled()
+
+    fetchMock.mockResolvedValueOnce({ ok: true })
+    await hooks.checkBackendReachability()
+
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ id: 'w1', name: 'Workspace', data: hooks.getState() }),
+    })
+    const ok2 = await hooks.saveToBackend()
+    expect(ok2).toBe(true)
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://api.example.com/workspaces/w1',
+      expect.objectContaining({ method: 'PUT' }),
+    )
+  })
 })
 
 function waitForHooks(window, timeoutMs = 2000) {

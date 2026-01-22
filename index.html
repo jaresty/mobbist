@@ -1242,6 +1242,9 @@
             backendConfig.lastCheckedAt = Date.now()
             saveBackendConfig(backendConfig)
             updateBackendStatusBadge(backendConfig.reachability)
+            if (backendConfig.backendUrl) {
+              disableBackendButtons(backendConfig.reachability !== 'connected')
+            }
             if (backendConfig.reachability === 'offline' && backendConfig.backendUrl) {
               setBackendDrawerOpen(true, false)
             }
@@ -1365,7 +1368,13 @@
           const keepalive = Boolean(options.keepalive)
           const suppressToast = Boolean(options.suppressToast)
           if (!isBackendEnabled()) return false
-          if (backendSaveBlocked && reason === 'autosave') return false
+          if (backendSaveBlocked) {
+            disableBackendButtons(true)
+            if (reason !== 'autosave' && !suppressToast) {
+              showToast('Backend save blocked until heartbeat succeeds.', { sticky: true })
+            }
+            return false
+          }
           const workspaceId = currentWorkspaceId()
           const snapshot = { id: workspaceId, name: 'Workspace', data: state }
           const method = workspaceId ? 'PUT' : 'POST'
