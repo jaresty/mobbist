@@ -1,0 +1,75 @@
+diff --git a/index.html b/index.html
+index 1d1671d..cccabe9 100644
+--- a/index.html
++++ b/index.html
+@@ -776,8 +776,9 @@
+ 
+       .backend-popover {
+         position: absolute;
+-        right: 12px;
++        left: 0;
+         top: calc(100% + 8px);
++        width: min(360px, 90vw);
+         padding: 10px 12px;
+         background: #ffffff;
+         border: 1px solid var(--border);
+@@ -796,21 +797,23 @@
+       }
+ 
+       .backend-controls-row {
+-        display: flex;
+-        flex-wrap: wrap;
++        display: grid;
++        grid-template-columns: repeat(2, minmax(0, 1fr));
+         gap: 8px;
+         width: 100%;
+       }
+ 
+       .backend-controls-row input[type='url'] {
+-        flex: 1;
+-        min-width: 220px;
++        grid-column: 1 / -1;
++        min-width: 0;
++        width: 100%;
+         padding: 8px;
+         border: 1px solid var(--border);
+         border-radius: 6px;
+       }
+ 
+       .backend-controls-row button {
++        width: 100%;
+         white-space: nowrap;
+       }
+ 
+@@ -860,7 +863,12 @@
+                 </button>
+               </div>
+             </div>
+-            <div id="backendDrawer" class="backend-drawer backend-popover" data-open="false" aria-hidden="true">
++            <div
++              id="backendDrawer"
++              class="backend-drawer backend-popover backend-popover-compact"
++              data-open="false"
++              aria-hidden="true"
++            >
+               <div class="backend-controls-row">
+                 <input
+                   id="backendUrlInput"
+diff --git a/tests/backend-status.test.js b/tests/backend-status.test.js
+index a1084c7..ebb78b1 100755
+--- a/tests/backend-status.test.js
++++ b/tests/backend-status.test.js
+@@ -199,6 +199,13 @@ describe('ADR-0011 backend auto-load and drawer', () => {
+     expect(drawer?.classList.contains('backend-popover')).toBe(true)
+   })
+ 
++  it('uses a compact popover layout', async () => {
++    const dom = createDom()
++    await waitForHooks(dom.window)
++    const drawer = dom.window.document.getElementById('backendDrawer')
++    expect(drawer?.classList.contains('backend-popover-compact')).toBe(true)
++  })
++
+   it('auto-connects and loads from backend on startup', async () => {
+     const fetchMock = vi.fn()
+     const sampleState = {

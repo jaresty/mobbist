@@ -776,8 +776,9 @@
 
       .backend-popover {
         position: absolute;
-        right: 12px;
+        left: 0;
         top: calc(100% + 8px);
+        width: min(360px, 90vw);
         padding: 10px 12px;
         background: #ffffff;
         border: 1px solid var(--border);
@@ -796,21 +797,23 @@
       }
 
       .backend-controls-row {
-        display: flex;
-        flex-wrap: wrap;
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: 8px;
         width: 100%;
       }
 
       .backend-controls-row input[type='url'] {
-        flex: 1;
-        min-width: 220px;
+        grid-column: 1 / -1;
+        min-width: 0;
+        width: 100%;
         padding: 8px;
         border: 1px solid var(--border);
         border-radius: 6px;
       }
 
       .backend-controls-row button {
+        width: 100%;
         white-space: nowrap;
       }
 
@@ -860,7 +863,12 @@
                 </button>
               </div>
             </div>
-            <div id="backendDrawer" class="backend-drawer backend-popover" data-open="false" aria-hidden="true">
+            <div
+              id="backendDrawer"
+              class="backend-drawer backend-popover backend-popover-compact"
+              data-open="false"
+              aria-hidden="true"
+            >
               <div class="backend-controls-row">
                 <input
                   id="backendUrlInput"
@@ -874,7 +882,7 @@
                 <button id="saveBackendButton" class="primary">Save to Backend</button>
                 <button id="revertToLocalButton" class="danger">Switch to Local Only</button>
                 <button id="copyBackendUrlButton" class="ghost">Copy Backend URL</button>
-                <button id="retryBackendButton" class="ghost">Retry Backend Connection</button>
+                <button id="retryBackendButton" class="ghost">Retry Backend</button>
               </div>
             </div>
           </section>

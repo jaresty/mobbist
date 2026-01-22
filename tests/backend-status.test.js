@@ -199,6 +199,13 @@ describe('ADR-0011 backend auto-load and drawer', () => {
     expect(drawer?.classList.contains('backend-popover')).toBe(true)
   })
 
+  it('uses a compact popover layout', async () => {
+    const dom = createDom()
+    await waitForHooks(dom.window)
+    const drawer = dom.window.document.getElementById('backendDrawer')
+    expect(drawer?.classList.contains('backend-popover-compact')).toBe(true)
+  })
+
   it('auto-connects and loads from backend on startup', async () => {
     const fetchMock = vi.fn()
     const sampleState = {
