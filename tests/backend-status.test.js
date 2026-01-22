@@ -261,6 +261,38 @@ describe('ADR-0011 backend auto-load and drawer', () => {
     )
     expect(hooks.getState().people[0].name).toBe('Auto')
   })
+
+  it('recreates missing workspace when backend returns 404', async () => {
+    const fetchMock = vi.fn()
+    const confirmMock = vi.fn(() => true)
+    const dom = createDom({ fetchMock, confirmMock })
+    const hooks = await waitForHooks(dom.window)
+    hooks.backendConfig.backendUrl = 'https://api.example.com/workspaces/missing'
+    hooks.backendConfig.reachability = 'connected'
+    hooks.workspaceMeta.workspaceId = 'missing'
+
+    fetchMock
+      .mockResolvedValueOnce({ ok: false, status: 404 })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ id: 'new-1', name: 'Workspace', data: hooks.getState() }),
+      })
+
+    const ok = await hooks.loadFromBackend()
+
+    expect(ok).toBe(true)
+    expect(confirmMock).toHaveBeenCalled()
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://api.example.com/workspaces/missing',
+      expect.objectContaining({ method: 'GET' }),
+    )
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://api.example.com/workspaces',
+      expect.objectContaining({ method: 'POST' }),
+    )
+    expect(hooks.workspaceMeta.workspaceId).toBe('new-1')
+    expect(hooks.backendConfig.backendUrl).toContain('/workspaces/new-1')
+  })
 })
 
 describe('ADR-0011 autosave and toast behaviour', () => {

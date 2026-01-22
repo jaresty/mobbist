@@ -1,0 +1,83 @@
+diff --git a/index.html b/index.html
+index 2b931a3..515e886 100644
+--- a/index.html
++++ b/index.html
+@@ -1331,6 +1331,35 @@
+               headers: { Accept: 'application/json' },
+             })
+             if (!response.ok) {
++              if (response.status === 404) {
++                const createNew = window.confirm(
++                  'Backend workspace not found. Create a new workspace with local data?',
++                )
++                if (createNew) {
++                  workspaceMeta.workspaceId = null
++                  workspaceMeta.persisted = false
++                  saveWorkspaceMeta(workspaceMeta)
++                  const ensuredId = await ensureWorkspaceId(baseUrl)
++                  if (ensuredId) {
++                    backendConfig.reachability = 'connected'
++                    saveBackendConfig(backendConfig)
++                    updateBackendStatusBadge(
++                      backendConfig.reachability,
++                      'Backend workspace recreated; using local data.',
++                    )
++                    disableBackendButtons(false)
++                    dirtySinceServerLoad = false
++                    return true
++                  }
++                  return false
++                }
++                revertToLocal()
++                workspaceMeta = createDefaultWorkspaceMeta()
++                saveWorkspaceMeta(workspaceMeta)
++                const backendUrlInput = document.getElementById('backendUrlInput')
++                if (backendUrlInput) backendUrlInput.value = ''
++                return false
++              }
+               console.warn('Backend load failed', response.status)
+               backendConfig.reachability = 'offline'
+               saveBackendConfig(backendConfig)
+diff --git a/tests/backend-status.test.js b/tests/backend-status.test.js
+index bb7b291..83b1ad2 100755
+--- a/tests/backend-status.test.js
++++ b/tests/backend-status.test.js
+@@ -261,6 +261,38 @@ describe('ADR-0011 backend auto-load and drawer', () => {
+     )
+     expect(hooks.getState().people[0].name).toBe('Auto')
+   })
++
++  it('recreates missing workspace when backend returns 404', async () => {
++    const fetchMock = vi.fn()
++    const confirmMock = vi.fn(() => true)
++    const dom = createDom({ fetchMock, confirmMock })
++    const hooks = await waitForHooks(dom.window)
++    hooks.backendConfig.backendUrl = 'https://api.example.com/workspaces/missing'
++    hooks.backendConfig.reachability = 'connected'
++    hooks.workspaceMeta.workspaceId = 'missing'
++
++    fetchMock
++      .mockResolvedValueOnce({ ok: false, status: 404 })
++      .mockResolvedValueOnce({
++        ok: true,
++        json: async () => ({ id: 'new-1', name: 'Workspace', data: hooks.getState() }),
++      })
++
++    const ok = await hooks.loadFromBackend()
++
++    expect(ok).toBe(true)
++    expect(confirmMock).toHaveBeenCalled()
++    expect(fetchMock).toHaveBeenCalledWith(
++      'https://api.example.com/workspaces/missing',
++      expect.objectContaining({ method: 'GET' }),
++    )
++    expect(fetchMock).toHaveBeenCalledWith(
++      'https://api.example.com/workspaces',
++      expect.objectContaining({ method: 'POST' }),
++    )
++    expect(hooks.workspaceMeta.workspaceId).toBe('new-1')
++    expect(hooks.backendConfig.backendUrl).toContain('/workspaces/new-1')
++  })
+ })
+ 
+ describe('ADR-0011 autosave and toast behaviour', () => {

@@ -88,3 +88,27 @@
   - Optional heartbeat copy tweaks for checking/unreachable/local language. Mitigation: align with product voice when copy guidance lands; update tests accordingly. Severity: Low. Trigger: UX copy review feedback. Owner: `docs/adr/0011-backend-auto-load-and-config-surface.md`.
 - next_work:
   - Behaviour: Optional heartbeat status copy polish (checking/unreachable/local) if product language changes; validate via `npm test`.
+
+## loop-5 | 2026-01-22T20:49:10Z | helper:v20251223.1
+- helper_version: helper:v20251223.1
+- focus: ADR-0011 (Decision section 1) – handle missing backend workspace (404) by prompting to recreate or disconnect, defaulting to recreate with local data.
+- work_log_updated: `docs/adr/0011-backend-auto-load-and-config-surface.work-log.md` (loop-5)
+- active_constraint: Missing workspace responses (404) force backend offline with no recreate/disconnect prompt; `npm test` fails on the new ADR-0011 expectation for recovery.
+- expected_value: Impact=High (unblocks auto-load for lost workspaces), Probability=High (guarded prompt + recreate), Time Sensitivity=Med (avoids user dead-ends); uncertainty: low after green.
+- validation_targets:
+  - `npm test`
+- mitigation_ladder: 1) add specifying test for 404 recreate prompt; 2) implement recreate/disconnect flow in loadFromBackend; 3) confirm status/dirty handling after recreate.
+- evidence:
+  - red: `docs/adr/evidence/0011/loop-5.md#loop-5-red`
+  - green: `docs/adr/evidence/0011/loop-5.md#loop-5-green`
+  - removal: `docs/adr/evidence/0011/loop-5.md#loop-5-removal`
+- rollback_plan: `git restore --source=HEAD -- index.html tests/backend-status.test.js docs/adr/evidence/0011/loop-5.md` then re-run `npm test` to observe the 404 recovery gap.
+- delta_summary: helper:diff-snapshot=`index.html | 29 insertions(+); tests/backend-status.test.js | 32 insertions(+)`; added 404 recreate test and loadFromBackend prompt/recreate handling; wip preserved at `docs/adr/evidence/0011/loop-5-wip.patch` for removal check.
+- loops_remaining_forecast: 0–1 loops (optional disconnect-branch test + copy polish); confidence: Medium.
+- residual_constraints:
+  - Disconnect branch in the 404 prompt is implemented but not yet specified by tests. Mitigation: add a specifying test for cancel-to-local flow and confirm backend URL cleared. Severity: Medium. Trigger: UX review requests explicit coverage.
+  - End-to-end backend smoke requires a running backend service outside repo control. Mitigation: keep jsdom/Vitest coverage and run manual smoke when backend is available. Severity: Medium. Trigger: backend endpoint changes or smoke test failures. Owner: `docs/adr/0010-backend-contract.md`.
+  - sendBeacon payload for existing workspaces uses a best-effort `__method` hint; backend may ignore it. Mitigation: evaluate keepalive fetch-only fallback or align backend support; monitor during manual smoke. Severity: Low. Trigger: backend rejects beacon payloads. Owner: `docs/adr/0010-backend-contract.md`.
+- next_work:
+  - Behaviour: Add specifying test for 404 disconnect path (cancel) ensuring local-only mode + cleared backend URL; validate via `npm test`.
+  - Behaviour: Optional heartbeat status copy polish (checking/unreachable/local) if product language changes; validate via `npm test`.

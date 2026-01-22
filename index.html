@@ -1331,6 +1331,35 @@
               headers: { Accept: 'application/json' },
             })
             if (!response.ok) {
+              if (response.status === 404) {
+                const createNew = window.confirm(
+                  'Backend workspace not found. Create a new workspace with local data?',
+                )
+                if (createNew) {
+                  workspaceMeta.workspaceId = null
+                  workspaceMeta.persisted = false
+                  saveWorkspaceMeta(workspaceMeta)
+                  const ensuredId = await ensureWorkspaceId(baseUrl)
+                  if (ensuredId) {
+                    backendConfig.reachability = 'connected'
+                    saveBackendConfig(backendConfig)
+                    updateBackendStatusBadge(
+                      backendConfig.reachability,
+                      'Backend workspace recreated; using local data.',
+                    )
+                    disableBackendButtons(false)
+                    dirtySinceServerLoad = false
+                    return true
+                  }
+                  return false
+                }
+                revertToLocal()
+                workspaceMeta = createDefaultWorkspaceMeta()
+                saveWorkspaceMeta(workspaceMeta)
+                const backendUrlInput = document.getElementById('backendUrlInput')
+                if (backendUrlInput) backendUrlInput.value = ''
+                return false
+              }
               console.warn('Backend load failed', response.status)
               backendConfig.reachability = 'offline'
               saveBackendConfig(backendConfig)
