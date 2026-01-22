@@ -181,6 +181,18 @@ describe('ADR-0011 backend auto-load and drawer', () => {
     expect((badge?.textContent || '').toLowerCase()).toContain('local')
   })
 
+  it('places the configure action beneath the status bar', async () => {
+    const dom = createDom()
+    await waitForHooks(dom.window)
+    const statusBar = dom.window.document.querySelector('.backend-status-bar')
+    const statusMeta = dom.window.document.querySelector('.backend-status-meta')
+    const configure = dom.window.document.getElementById('backendConfigureButton')
+    expect(statusBar).not.toBeNull()
+    expect(statusMeta).not.toBeNull()
+    expect(configure?.parentElement).toBe(statusMeta)
+    expect(statusBar?.nextElementSibling).toBe(statusMeta)
+  })
+
   it('auto-connects and loads from backend on startup', async () => {
     const fetchMock = vi.fn()
     const sampleState = {

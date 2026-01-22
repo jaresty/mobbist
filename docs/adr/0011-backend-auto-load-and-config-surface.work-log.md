@@ -83,6 +83,8 @@
 - delta_summary: helper:diff-snapshot=`index.html | 11 insertions(+), 1 deletion(-); tests/backend-status.test.js | 28 insertions(+)`; manual saves now respect backendSaveBlocked and heartbeat re-enables save buttons; removal evidence rerun with implementation-only revert and post-removal green verification logged in `docs/adr/evidence/0011/loop-4.md#loop-4-verify`; wip preserved at `docs/adr/evidence/0011/loop-4-wip.patch` for removal check.
 - loops_remaining_forecast: 0–1 loops (optional heartbeat copy polish if product language changes); confidence: Medium.
 - residual_constraints:
+  - Heartbeat cadence (30s) is not specified by tests; only state labels are covered. Mitigation: add a timer-based test or contract assertion for the interval. Severity: Medium. Trigger: heartbeat scheduling changes. Owner: `docs/adr/0011-backend-auto-load-and-config-surface.md`.
+  - Manual smoke with live backend is not logged in evidence. Mitigation: capture a manual smoke run transcript in ADR evidence. Severity: Medium. Trigger: backend rollout or API changes. Owner: `docs/adr/0010-backend-contract.md`.
   - End-to-end backend smoke requires a running backend service outside repo control. Mitigation: keep jsdom/Vitest coverage and run manual smoke when backend is available. Severity: Medium. Trigger: backend endpoint changes or smoke test failures. Owner: `docs/adr/0010-backend-contract.md`.
   - sendBeacon payload for existing workspaces uses a best-effort `__method` hint; backend may ignore it. Mitigation: evaluate keepalive fetch-only fallback or align backend support; monitor during manual smoke. Severity: Low. Trigger: backend rejects beacon payloads. Owner: `docs/adr/0010-backend-contract.md`.
   - Optional heartbeat copy tweaks for checking/unreachable/local language. Mitigation: align with product voice when copy guidance lands; update tests accordingly. Severity: Low. Trigger: UX copy review feedback. Owner: `docs/adr/0011-backend-auto-load-and-config-surface.md`.
@@ -180,3 +182,28 @@
   - sendBeacon payload for existing workspaces uses a best-effort `__method` hint; backend may ignore it. Mitigation: evaluate keepalive fetch-only fallback or align backend support; monitor during manual smoke. Severity: Low. Trigger: backend rejects beacon payloads. Owner: `docs/adr/0010-backend-contract.md`.
 - next_work:
   - Behaviour: Run manual backend smoke once backend service is available; validate via a live backend session.
+
+## loop-9 | 2026-01-22T21:29:30Z | helper:v20251223.1
+- helper_version: helper:v20251223.1
+- focus: ADR-0011 (Decision section 2) – relocate the Configure action beneath the status bar to reduce backend prominence.
+- work_log_updated: `docs/adr/0011-backend-auto-load-and-config-surface.work-log.md` (loop-9)
+- active_constraint: The Configure button still sits in the primary status bar row, keeping backend controls front-and-center; `npm test` fails on the new placement guardrail.
+- expected_value: Impact=Medium (reduces visual dominance), Probability=High (layout change), Time Sensitivity=Low (polish); uncertainty: low after green.
+- validation_targets:
+  - `npm test`
+- mitigation_ladder: 1) add specifying test for configure placement; 2) move configure into a secondary status row; 3) adjust sizing to reduce visual weight.
+- evidence:
+  - red: `docs/adr/evidence/0011/loop-9.md#loop-9-red`
+  - green: `docs/adr/evidence/0011/loop-9.md#loop-9-green`
+  - removal: `docs/adr/evidence/0011/loop-9.md#loop-9-removal`
+- rollback_plan: `git restore --source=HEAD -- index.html tests/backend-status.test.js docs/adr/evidence/0011/loop-9.md` then re-run `npm test` to observe the placement regression.
+- delta_summary: helper:diff-snapshot=`index.html | 19 insertions(+), 2 deletions(-); tests/backend-status.test.js | 12 insertions(+)`; configure moved beneath status bar with smaller styling; wip preserved at `docs/adr/evidence/0011/loop-9-wip.patch` for removal check.
+- loops_remaining_forecast: 0–1 loops (heartbeat cadence contract or smoke evidence logging); confidence: Medium.
+- residual_constraints:
+  - Heartbeat cadence (30s) is not specified by tests; only state labels are covered. Mitigation: add a timer-based test or contract assertion for the interval. Severity: Medium. Trigger: heartbeat scheduling changes. Owner: `docs/adr/0011-backend-auto-load-and-config-surface.md`.
+  - Manual smoke with live backend is not logged in evidence. Mitigation: capture a manual smoke run transcript in ADR evidence. Severity: Medium. Trigger: backend rollout or API changes. Owner: `docs/adr/0010-backend-contract.md`.
+  - End-to-end backend smoke requires a running backend service outside repo control. Mitigation: keep jsdom/Vitest coverage and run manual smoke when backend is available. Severity: Medium. Trigger: backend endpoint changes or smoke test failures. Owner: `docs/adr/0010-backend-contract.md`.
+  - sendBeacon payload for existing workspaces uses a best-effort `__method` hint; backend may ignore it. Mitigation: evaluate keepalive fetch-only fallback or align backend support; monitor during manual smoke. Severity: Low. Trigger: backend rejects beacon payloads. Owner: `docs/adr/0010-backend-contract.md`.
+- next_work:
+  - Behaviour: Log manual backend smoke evidence for localhost run; validate via recorded UI observations.
+  - Behaviour: Decide whether to add heartbeat cadence coverage; validate via `npm test` with fake timers.

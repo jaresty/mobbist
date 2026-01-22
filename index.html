@@ -758,6 +758,19 @@
         color: var(--muted);
       }
 
+      .backend-status-meta {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        flex-wrap: wrap;
+      }
+
+      .backend-configure {
+        font-size: 0.75rem;
+        padding: 2px 8px;
+      }
+
       .backend-drawer {
         display: none;
         flex-direction: column;
@@ -853,9 +866,11 @@
             <div id="backendStatusBadge" class="backend-badge" data-status="unknown">Backend: Local</div>
             <div id="backendHeartbeatStatus" class="backend-heartbeat" data-status="idle"></div>
           </div>
-          <button id="backendConfigureButton" class="ghost">Configure</button>
         </div>
-        <div id="backendStatusMessage" class="backend-status-message"></div>
+        <div class="backend-status-meta">
+          <div id="backendStatusMessage" class="backend-status-message"></div>
+          <button id="backendConfigureButton" class="ghost backend-configure">Configure</button>
+        </div>
         <div id="backendDrawer" class="backend-drawer" data-open="false" aria-hidden="true">
           <div class="backend-controls-row">
             <input

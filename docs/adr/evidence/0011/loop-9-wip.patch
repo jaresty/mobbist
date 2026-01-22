@@ -1,0 +1,61 @@
+diff --git a/index.html b/index.html
+index 5f6b2b7..afda9c1 100644
+--- a/index.html
++++ b/index.html
+@@ -758,6 +758,19 @@
+         color: var(--muted);
+       }
+ 
++      .backend-status-meta {
++        display: flex;
++        align-items: center;
++        justify-content: space-between;
++        gap: 12px;
++        flex-wrap: wrap;
++      }
++
++      .backend-configure {
++        font-size: 0.75rem;
++        padding: 2px 8px;
++      }
++
+       .backend-drawer {
+         display: none;
+         flex-direction: column;
+@@ -853,9 +866,11 @@
+             <div id="backendStatusBadge" class="backend-badge" data-status="unknown">Backend: Local</div>
+             <div id="backendHeartbeatStatus" class="backend-heartbeat" data-status="idle"></div>
+           </div>
+-          <button id="backendConfigureButton" class="ghost">Configure</button>
+         </div>
+-        <div id="backendStatusMessage" class="backend-status-message"></div>
++        <div class="backend-status-meta">
++          <div id="backendStatusMessage" class="backend-status-message"></div>
++          <button id="backendConfigureButton" class="ghost backend-configure">Configure</button>
++        </div>
+         <div id="backendDrawer" class="backend-drawer" data-open="false" aria-hidden="true">
+           <div class="backend-controls-row">
+             <input
+diff --git a/tests/backend-status.test.js b/tests/backend-status.test.js
+index fc7458a..c45d68d 100755
+--- a/tests/backend-status.test.js
++++ b/tests/backend-status.test.js
+@@ -181,6 +181,18 @@ describe('ADR-0011 backend auto-load and drawer', () => {
+     expect((badge?.textContent || '').toLowerCase()).toContain('local')
+   })
+ 
++  it('places the configure action beneath the status bar', async () => {
++    const dom = createDom()
++    await waitForHooks(dom.window)
++    const statusBar = dom.window.document.querySelector('.backend-status-bar')
++    const statusMeta = dom.window.document.querySelector('.backend-status-meta')
++    const configure = dom.window.document.getElementById('backendConfigureButton')
++    expect(statusBar).not.toBeNull()
++    expect(statusMeta).not.toBeNull()
++    expect(configure?.parentElement).toBe(statusMeta)
++    expect(statusBar?.nextElementSibling).toBe(statusMeta)
++  })
++
+   it('auto-connects and loads from backend on startup', async () => {
+     const fetchMock = vi.fn()
+     const sampleState = {
