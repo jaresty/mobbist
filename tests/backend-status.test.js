@@ -405,6 +405,27 @@ describe('ADR-0011 backend auto-load and drawer', () => {
     expect(pill?.dataset.status).toBe('unreachable')
     expect(pill?.textContent).toBe('Backend: Unreachable 🔴')
   })
+
+  it('runs heartbeat on the configured cadence', async () => {
+    vi.useFakeTimers()
+    const fetchMock = vi.fn(() => Promise.resolve({ ok: true }))
+    const dom = createDom({ fetchMock })
+    const hooks = await waitForHooks(dom.window)
+    hooks.backendConfig.backendUrl = 'https://api.example.com'
+
+    hooks.startBackendHeartbeat(30000)
+    fetchMock.mockClear()
+
+    vi.advanceTimersByTime(30000)
+    await Promise.resolve()
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://api.example.com/capabilities',
+      expect.objectContaining({ method: 'GET' }),
+    )
+    hooks.stopBackendHeartbeat()
+    vi.useRealTimers()
+  })
 })
 
 describe('ADR-0011 autosave and toast behaviour', () => {
