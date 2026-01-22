@@ -326,6 +326,10 @@
 - next_work:
   - Behaviour: Run periodic manual backend smoke when backend API changes; validate via recorded UI observations.
 
+## completion-note | 2026-01-22T22:30:00Z
+- status_update: Marked ADR-0011 as Completed after the backend drawer toast feedback landed.
+- validation: No new validation run for this administrative status update.
+
 ## loop-15 | 2026-01-22T22:19:20Z | helper:v20251223.1
 - helper_version: helper:v20251223.1
 - focus: ADR-0011 (Decision sections 1-3) – prompt and auto-load when Connect & Check targets an existing backend workspace.
