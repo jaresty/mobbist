@@ -1,6 +1,6 @@
 # ADR: Roles Entity for Track Allocation
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2025-12-20
 - Owners: Docs app maintainers
 - Related:

@@ -1,6 +1,6 @@
 # ADR: Pair/Mob Planning Single-Page Tool
 
-- Status: Proposed _(persistence strategy superseded by ADR-0009: Frontend Persistence and Backend Integration Strategy)_
+- Status: Accepted _(persistence strategy superseded by ADR-0009: Frontend Persistence and Backend Integration Strategy)_
 - Date: 2025-12-04
 - Owners: Docs app maintainers
 - Related:
