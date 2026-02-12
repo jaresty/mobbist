@@ -5622,7 +5622,13 @@
           const shuffleRolesButtonEl = document.getElementById('shuffleRolesButton')
           if (shuffleRolesButtonEl) {
             shuffleRolesButtonEl.addEventListener('click', () => {
-              shuffleAllRoles()
+              const changed = shuffleAllRoles()
+              if (!changed) {
+                showToast(
+                  'Shuffle completed but no roles moved (unlock tracks or try again to get a different assignment)',
+                  { durationMs: 3000 },
+                )
+              }
             })
           }
 
