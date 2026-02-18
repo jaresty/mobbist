@@ -3858,18 +3858,29 @@
             }
 
             const previousAssignments = unlockedTracks.map((track) => [...track.roleIds])
+
+            unlockedTracks.forEach((track) => {
+              track.roleIds = []
+            })
+
             const shuffled = [...pool]
             for (let i = shuffled.length - 1; i > 0; i--) {
               const j = Math.floor(Math.random() * (i + 1))
               ;[shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]
             }
 
-            unlockedTracks.forEach((track) => {
-              track.roleIds = []
-            })
-
-            shuffled.forEach((roleId, index) => {
-              const target = unlockedTracks[index % unlockedTracks.length]
+            const roleToTrack = {}
+            shuffled.forEach((roleId) => {
+              const availableTracks = unlockedTracks.filter((t) => 
+                !Object.values(roleToTrack).includes(t.id)
+              )
+              let target
+              if (availableTracks.length > 0) {
+                target = availableTracks[Math.floor(Math.random() * availableTracks.length)]
+              } else {
+                target = unlockedTracks[Math.floor(Math.random() * unlockedTracks.length)]
+              }
+              roleToTrack[roleId] = target.id
               target.roleIds.push(roleId)
             })
 
